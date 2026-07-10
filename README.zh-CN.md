@@ -64,20 +64,32 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 的技能已加载(类型为 Global)。数量随上游仓库变化,可能变动。新建会话输入类似
 「帮我设计一个新功能」的指令,应触发 `brainstorming` 技能。
 
+## 更新
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/update.sh | bash
+```
+
+把已安装的 skills 精确镜像到上游最新状态:更新变动内容,并移除上游已删除的
+skill。绝不触碰你自己安装的 skill —— 只有本工程 manifest 记录过的 skill 才会
+被同步。
+
 ## 卸载
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/uninstall.sh | bash
 ```
 
-仅移除 upstream Superpowers 提供的技能,不会动你自己的技能。User Rules 需在 Trae
-设置中手动移除。
+仅移除 upstream Superpowers 提供的技能,不会动你自己的技能。存在 manifest 时按清单
+精确卸载(无需联网);否则回退到上游清单。User Rules 需在 Trae 设置中手动移除。
 
 ## 工作原理
 
 - **Skills** 被复制到 Trae 全局技能目录,使其在所有项目中加载。
 - **User Rules** 替代 upstream 的 SessionStart Hook,要求 agent 在任何任务前先检查
   是否有匹配的技能。
+- **Manifest** —— 每个 skills 目录下的 `.superpowers-manifest` 文件记录本工程装入了
+  哪些 skill,使更新与卸载能精确定位它们,不影响你自己的 skill。请勿手动编辑。
 
 ## 许可证
 

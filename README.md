@@ -68,6 +68,17 @@ upstream Superpowers skills are loaded (type: Global). The count tracks the
 upstream repo, so it may change over time. In a new session, type a request
 like "help me design a new feature" — the `brainstorming` skill should trigger.
 
+## Update
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/update.sh | bash
+```
+
+This re-syncs the installed skills to the latest upstream state (an exact
+mirror): it updates changed content and removes skills that upstream has
+deleted. It never touches skills you installed yourself — only skills this
+project recorded in its manifest are affected.
+
 ## Uninstall
 
 ```bash
@@ -75,7 +86,9 @@ curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/unins
 ```
 
 This removes only the skills provided by upstream Superpowers; your own skills
-are left untouched. Remove the User Rules manually in Trae Settings.
+are left untouched. When a manifest is present it uninstalls precisely from that
+list (no network needed); otherwise it falls back to the upstream skill list.
+Remove the User Rules manually in Trae Settings.
 
 ## How it works
 
@@ -83,6 +96,9 @@ are left untouched. Remove the User Rules manually in Trae Settings.
   every project.
 - **User Rules** replace the upstream SessionStart hook, instructing the agent
   to check for a relevant skill before any task.
+- **Manifest** — a `.superpowers-manifest` file in each skills directory records
+  which skills this project installed, so update and uninstall can target them
+  precisely without touching your own skills. Do not edit it by hand.
 
 ## License
 
