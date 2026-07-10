@@ -65,8 +65,42 @@ t_keep_user_skill() {
   rm -rf "$home" "$src"
 }
 
+# 用例5: skill 内被上游删的文件应消失,新文件应出现(逐 skill 清替=目录级镜像)。
+t_intra_skill_mirror() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-a"
+  printf 'old\n' > "$home/$V_AGENT_CN/skills/skill-a/old.md"   # 上游将删除此文件
+  printf 'skill-a\n' > "$home/$V_AGENT_CN/skills/$MANIFEST"
+  # 新源的 skill-a 只有 SKILL.md 与 new.md,没有 old.md
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  printf 'new\n' > "$src/skills/skill-a/new.md"
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "skill 内镜像退出码为 0"
+  assert_file_absent "$home/$V_AGENT_CN/skills/skill-a/old.md" "上游已删文件 old.md 消失"
+  assert_file_exists "$home/$V_AGENT_CN/skills/skill-a/new.md" "上游新增文件 new.md 存在"
+  rm -rf "$home" "$src"
+}
+
+# 用例6: 无 manifest(老用户首次 update)→ 不删任何东西,全量镜像并补写 manifest。
+t_missing_manifest_degrade() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-a"
+  mkdir -p "$home/$V_AGENT_CN/skills/my-own"     # 无 manifest,用户 skill 不应被删
+  # 故意不创建 manifest 文件
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a skill-c
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "manifest 缺失降级退出码为 0"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/my-own" "无 manifest 时用户 skill 保留"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-c" "无 manifest 时仍写入新 skill"
+  assert_file_exists "$home/$V_AGENT_CN/skills/$MANIFEST" "无 manifest 时补写 manifest"
+  assert_file_contains "$home/$V_AGENT_CN/skills/$MANIFEST" "skill-a" "补写的 manifest 含 skill-a"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
 t_basic_update
 t_remove_orphan
 t_keep_user_skill
+t_intra_skill_mirror
+t_missing_manifest_degrade
 finish_tests
