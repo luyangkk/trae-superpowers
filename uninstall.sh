@@ -7,6 +7,8 @@
 set -u
 
 UPSTREAM_URL="${SUPERPOWERS_UPSTREAM_URL:-https://github.com/obra/superpowers.git}"
+# manifest 文件名:本工程装入 skill 的清单;优先据此精确卸载。
+MANIFEST=".superpowers-manifest"
 
 # variant_roots: 逐行输出四个受支持的 Trae 变体根目录名。
 variant_roots() {
@@ -54,6 +56,22 @@ resolve_src() {
   printf '%s\n' "$tmp/skills"
 }
 
+# remove_by_manifest: 按目标目录内 manifest 逐名删除本工程装入的 skill,并删 manifest。
+# 参数: $1=目标 skills 目录。返回 0 表示已按 manifest 处理;返回 1 表示无 manifest(交由回退)。
+remove_by_manifest() {
+  local dst="$1" name
+  [ -f "$dst/$MANIFEST" ] || return 1
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if [ -d "$dst/$name" ]; then
+      printf 'Removing: %s\n' "$dst/$name"
+      rm -rf "$dst/$name"
+    fi
+  done < "$dst/$MANIFEST"
+  rm -f "$dst/$MANIFEST"
+  return 0
+}
+
 main() {
   local dirs
   dirs="$(detect_skill_dirs)"
@@ -62,6 +80,29 @@ main() {
     return 3
   fi
 
+  # 第一遍:凡有 manifest 的目标目录,直接按 manifest 卸载(离线可用)。
+  # 收集仍需回退处理(无 manifest)的目标目录到 fallback_dirs。
+  local d fallback_dirs=""
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    [ -d "$d" ] || continue
+    if remove_by_manifest "$d"; then
+      : # 已按 manifest 处理
+    else
+      fallback_dirs="$fallback_dirs
+$d"
+    fi
+  done <<EOF
+$dirs
+EOF
+
+  # 若所有目标都已按 manifest 处理完,无需获取上游清单。
+  if [ -z "$(printf '%s' "$fallback_dirs" | tr -d '[:space:]')" ]; then
+    printf 'Done. Note: remove the Superpowers User Rules manually in Trae settings.\n'
+    return 0
+  fi
+
+  # 第二遍(回退):无 manifest 的目标,沿用"按上游清单反推删除"。
   local src
   if ! src="$(resolve_src)"; then
     printf 'Error: failed to obtain superpowers skills list.\n' >&2
@@ -73,7 +114,7 @@ main() {
     return 4
   fi
 
-  local d entry name
+  local entry name
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     [ -d "$d" ] || continue
@@ -86,7 +127,7 @@ main() {
       fi
     done
   done <<EOF
-$dirs
+$fallback_dirs
 EOF
 
   if [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ]; then

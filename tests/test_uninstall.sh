@@ -6,6 +6,7 @@ source "$HERE/test_helpers.bash"
 UNINSTALL="$HERE/../uninstall.sh"
 
 V_AGENT_CN="$(printf '\056\137agent-cn')"
+MANIFEST=".superpowers-manifest"
 
 # 用例1: 已装入的 upstream skills 应被移除,用户自有 skill 保留,退出码 0
 t_uninstall_cn() {
@@ -22,5 +23,23 @@ t_uninstall_cn() {
   rm -rf "$home" "$src"
 }
 
+# 用例2: manifest 存在时,按 manifest 逐名删除,无需上游源;manifest 本身也被删,用户 skill 保留。
+t_uninstall_by_manifest() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-a"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-b"
+  mkdir -p "$home/$V_AGENT_CN/skills/my-own"      # 用户自有,不在 manifest
+  printf 'skill-a\nskill-b\n' > "$home/$V_AGENT_CN/skills/$MANIFEST"
+  # 不设置 SUPERPOWERS_SKILLS_SRC:验证 manifest 路径离线可用
+  HOME="$home" bash "$UNINSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "按 manifest 卸载退出码为 0"
+  assert_dir_absent "$home/$V_AGENT_CN/skills/skill-a" "manifest 记录的 skill-a 被删"
+  assert_dir_absent "$home/$V_AGENT_CN/skills/skill-b" "manifest 记录的 skill-b 被删"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/my-own" "用户自有 skill 保留"
+  assert_file_absent "$home/$V_AGENT_CN/skills/$MANIFEST" "manifest 文件被删除"
+  rm -rf "$home"
+}
+
 t_uninstall_cn
+t_uninstall_by_manifest
 finish_tests
