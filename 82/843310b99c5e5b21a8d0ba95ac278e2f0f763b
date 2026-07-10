@@ -1,0 +1,30 @@
+tests/test_helpers.bash
+  s_040fa1060de991::t_6388802b7ce407 81-91
+install.sh
+  s_040fa1060de991::t_22f9eb94c61634 79-81,88-93,99,107
+update.sh
+  s_040fa1060de991::t_d595d22505031d 75-76,85-90,96,104
+tests/test_update.sh
+  s_040fa1060de991::t_92e9c9ec7088ee 52
+tests/test_install.sh
+  s_040fa1060de991::t_27b8629b3ab347 90-91
+  s_040fa1060de991::t_f574f736d612e4 43-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "82843310b99c5e5b21a8d0ba95ac278e2f0f763b",
+  "prompts": {},
+  "sessions": {
+    "s_040fa1060de991": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a5094b7bc4570de6484cd5d",
+        "model": "openrouter-3o__dev"
+      },
+      "human_author": "陆阳 <luyang.kk@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
