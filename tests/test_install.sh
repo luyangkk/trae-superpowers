@@ -55,6 +55,29 @@ t_writes_user_rule() {
   rm -rf "$home" "$src"
 }
 
+# 用例10: 重复安装两次,user_rules 下带标记的规则文件仍只有一个(幂等,覆盖而非新增)。
+t_user_rule_idempotent() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
+  assert_exit_code 1 "$n" "重复安装后带标记规则文件恰为 1 个"
+  rm -rf "$home" "$src"
+}
+
+# 用例11: 预置用户自有规则(不含标记),安装后其内容原样保留。
+t_user_rule_preserves_user_files() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/user_rules"
+  printf 'my own rule\n' > "$home/$V_AGENT_CN/user_rules/rule-mine.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-mine.md" "my own rule" "用户自有规则内容保留"
+  rm -rf "$home" "$src"
+}
+
 # 用例7: 重复安装(目标 skill 已存在)→ 合并覆盖,不产生嵌套目录、顶层内容刷新为新版。
 # 回归防护:逐 skill 的 cp -R "$src/$name" "$dst/$name" 在 dst 已存在时会嵌套并残留旧内容。
 t_reinstall_no_nesting() {
@@ -106,4 +129,6 @@ t_reinstall_no_nesting
 t_copy_failure_skips_manifest
 t_dedup_symlink
 t_writes_user_rule
+t_user_rule_idempotent
+t_user_rule_preserves_user_files
 finish_tests
