@@ -1,0 +1,7 @@
+# macOS
+.DS_Store
+# 测试临时目录
+tests/tmp/
+# 编辑器
+.idea/
+.vscode/
