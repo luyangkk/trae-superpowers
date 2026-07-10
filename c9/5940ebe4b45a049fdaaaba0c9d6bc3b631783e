@@ -1,0 +1,162 @@
+docs/superpowers/specs/2026-07-10-trae-superpowers-design.md
+  s_02dfd4314945df::t_3b412a7e5f34b4 16,23-24,26-49,52,76-84,89,93,98-101,110-111,139,142,144,146 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a5072af393ce864b16308ce","tool_type":"agent","tool_id":"Write","line_ranges":[{"Single":16},{"Range":[23,24]},{"Range":[26,49]},{"Single":52},{"Range":[76,84]},{"Single":89},{"Single":93},{"Range":[98,101]},{"Range":[110,111]},{"Single":139},{"Single":142},{"Single":144},{"Single":146}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c95940ebe4b45a049fdaaaba0c9d6bc3b631783e",
+  "prompts": {},
+  "sessions": {
+    "s_02dfd4314945df": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a506e4d393ce864b1630855",
+        "model": "openrouter-3o__dev"
+      },
+      "human_author": "陆阳 <luyang.kk@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "docs/superpowers/specs/2026-07-10-trae-superpowers-design.md": [
+      {
+        "hash": "s_02dfd4314945df::t_3b412a7e5f34b4",
+        "line_ranges": [
+          {
+            "Single": 16
+          },
+          {
+            "Range": [
+              23,
+              24
+            ]
+          },
+          {
+            "Range": [
+              26,
+              49
+            ]
+          },
+          {
+            "Single": 52
+          },
+          {
+            "Range": [
+              76,
+              84
+            ]
+          },
+          {
+            "Single": 89
+          },
+          {
+            "Single": 93
+          },
+          {
+            "Range": [
+              98,
+              101
+            ]
+          },
+          {
+            "Range": [
+              110,
+              111
+            ]
+          },
+          {
+            "Single": 139
+          },
+          {
+            "Single": 142
+          },
+          {
+            "Single": 144
+          },
+          {
+            "Single": 146
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a5072af393ce864b16308ce",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Single": 16
+              },
+              {
+                "Range": [
+                  23,
+                  24
+                ]
+              },
+              {
+                "Range": [
+                  26,
+                  49
+                ]
+              },
+              {
+                "Single": 52
+              },
+              {
+                "Range": [
+                  76,
+                  84
+                ]
+              },
+              {
+                "Single": 89
+              },
+              {
+                "Single": 93
+              },
+              {
+                "Range": [
+                  98,
+                  101
+                ]
+              },
+              {
+                "Range": [
+                  110,
+                  111
+                ]
+              },
+              {
+                "Single": 139
+              },
+              {
+                "Single": 142
+              },
+              {
+                "Single": 144
+              },
+              {
+                "Single": 146
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_02dfd4314945df": {
+      "tool": "trae",
+      "conversation_id": "6a506e4d393ce864b1630855",
+      "session_id": "6a506e4d393ce864b1630855",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_02dfd4314945df::t_3b412a7e5f34b4": {
+      "tool": "trae",
+      "conversation_id": "6a506e4d393ce864b1630855",
+      "session_id": "6a506e4d393ce864b1630855",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
