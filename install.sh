@@ -8,6 +8,8 @@
 set -u
 
 UPSTREAM_URL="${SUPERPOWERS_UPSTREAM_URL:-https://github.com/obra/superpowers.git}"
+# manifest 文件名:记录本工程装入的 skill 名单,供 update/uninstall 精确定位。
+MANIFEST=".superpowers-manifest"
 
 # variant_roots: 逐行输出四个受支持的 Trae 变体根目录名(仅名字,不含 HOME)。
 # 顺序:CN agent、国际 agent、CN trae、国际 trae。
@@ -66,6 +68,18 @@ copy_skills() {
   cp -R "$src"/* "$dst"/
 }
 
+# write_manifest: 把源目录下所有 skill 名逐行写入目标 skills 目录的 manifest。
+# 参数: $1=源 skills 目录  $2=目标 skills 目录
+write_manifest() {
+  local src="$1" dst="$2" entry name
+  : > "$dst/$MANIFEST"                    # 清空/新建 manifest
+  for entry in "$src"/*/; do
+    [ -d "$entry" ] || continue
+    name="$(basename "$entry")"
+    printf '%s\n' "$name" >> "$dst/$MANIFEST"
+  done
+}
+
 main() {
   local dirs
   dirs="$(detect_skill_dirs)"
@@ -91,6 +105,7 @@ main() {
     [ -n "$d" ] || continue
     printf 'Installing skills into: %s\n' "$d"
     copy_skills "$src" "$d"
+    write_manifest "$src" "$d"
   done <<EOF
 $dirs
 EOF

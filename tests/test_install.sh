@@ -33,6 +33,9 @@ t_variant_case() {
   assert_exit_code 0 "$?" "$label: 命中时退出码为 0"
   assert_dir_exists "$home/$root/skills/using-superpowers" "$label: using-superpowers 被复制"
   assert_dir_exists "$home/$root/skills/brainstorming" "$label: brainstorming 被复制"
+  assert_file_exists "$home/$root/skills/.superpowers-manifest" "$label: manifest 已生成"
+  assert_file_contains "$home/$root/skills/.superpowers-manifest" "using-superpowers" "$label: manifest 含 using-superpowers"
+  assert_file_contains "$home/$root/skills/.superpowers-manifest" "brainstorming" "$label: manifest 含 brainstorming"
   rm -rf "$home" "$src"
 }
 
