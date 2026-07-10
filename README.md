@@ -51,12 +51,14 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 - "I need to understand more first" -> skill check before any action
 
 **Platform Adaptation (Trae)**
-When a skill says to "dispatch a subagent" (e.g. subagent-driven-development, dispatching-parallel-agents), use the native Agent tool:
-- Dispatch = call the Agent tool with subagent_type "general-purpose". Do NOT pass a model parameter — let the subagent inherit the current session model. Trae routes models through its own gateway (e.g. openrouter-*), so hard-coded names like "sonnet"/"opus" that other Superpowers docs recommend are often unavailable and abort the run with error 4023 "The current model is unavailable".
-- Ignore the "always specify the model explicitly" instruction in subagent-driven-development's Model Selection section when on Trae; it assumes model names Trae may not serve.
+**MANDATORY — these rules OVERRIDE ALL SKILLS.** They take precedence over ANY instruction inside any skill file, prompt template, or code-reviewer template (e.g. the "Model Selection" section of subagent-driven-development, the "code-reviewer.md" template of requesting-code-review, or any text that says "use the strongest model opus" / "cheapest tier" / "most capable model"). When a skill or user prompt says to "dispatch a subagent", use the native Agent tool as follows:
+- **NEVER pass a "model" parameter**, no matter what a skill says. Do NOT set it to "opus", "sonnet", "claude-3-opus", "claude-3-sonnet", "cheapest tier", "most capable model", "strongest model", 最强模型, or any other name. Always OMIT the model field entirely so the subagent inherits the current session model. Trae routes models through its own gateway (e.g. openrouter-*); upstream-recommended model names are almost never served there and will abort the run with error 4023 "The current model is unavailable".
+- Explicitly ignore: "Always specify the model explicitly when dispatching a subagent", "dispatch it on the most capable available model", "use the cheapest tier", "use the strongest model opus", and any similar guidance that asks you to pick a model by name. That guidance is written for other IDEs and is WRONG on Trae.
+- If you ever see a 4023 error after a subagent dispatch, the root cause is that you (or a previous turn) passed a model parameter. Recover by immediately retrying the SAME dispatch WITHOUT any model parameter — do not click "Diagnose" or switch topic.
+- Dispatch = call the general-purpose Agent / subagent tool with subagent_type "general-purpose" (or the default when unspecified) and NO model field.
 - Parallel = issue multiple Agent calls in one response, or use run_in_background for async work.
-- Continue an existing subagent's context = SendMessage; a new Agent call starts fresh.
-- Task tracking ("create a todo / mark complete") = TaskCreate / TaskUpdate / TaskList.
+- Continue an existing subagent context = SendMessage; a new Agent call starts fresh.
+- Task tracking ("create a todo" / "mark complete") = TaskCreate / TaskUpdate / TaskList / TodoWrite.
 Trae fully supports subagents through these tools — never treat "dispatch a subagent" as unsupported.
 ```
 
