@@ -27,8 +27,8 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/inst
 ## 配置 User Rules
 
 `install.sh` 与 `update.sh` 现在会把该规则自动写入各 Trae 变体的 `user_rules/`
-目录。**重启 Trae 后,打开 设置 > Rules 确认规则已出现。** 若未出现,规则内容其实
-已就位 —— 可用下方文本在 UI 手动粘贴作为回退:
+目录。**重启 Trae 后,打开 设置 > Rules 确认规则已出现。** 规则文件已写入磁盘;
+若 Trae 仍未显示(部分版本需手动确认一次),可用下方文本手动粘贴作为回退:
 
 ```
 **Superpowers Skills System**

@@ -31,8 +31,9 @@ Trae.
 
 `install.sh` and `update.sh` now write this rule automatically into each Trae
 variant's `user_rules/` directory. **Restart Trae, then open Settings > Rules
-to confirm the rule appears.** If it does not, the content is already in place —
-paste it manually as a fallback using the text below:
+to confirm the rule appears.** The rule file is already on disk; if Trae still
+does not show it (some versions need a manual confirm), paste it yourself using
+the text below as a fallback:
 
 ```
 **Superpowers Skills System**
