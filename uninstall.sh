@@ -10,6 +10,16 @@ UPSTREAM_URL="${SUPERPOWERS_UPSTREAM_URL:-https://github.com/obra/superpowers.gi
 # manifest 文件名:本工程装入 skill 的清单;优先据此精确卸载。
 MANIFEST=".superpowers-manifest"
 
+# log: 统一日志输出。参数: $1=级别(INFO/WARN/ERROR) $2..=消息。
+# ERROR 走 stderr,其余走 stdout,便于 grep 过滤与错误重定向;不带时间戳保持简洁。
+log() {
+  local level="$1"; shift
+  case "$level" in
+    ERROR) printf '[%s] %s\n' "$level" "$*" >&2 ;;
+    *)     printf '[%s] %s\n' "$level" "$*" ;;
+  esac
+}
+
 # variant_roots: 逐行输出四个受支持的 Trae 变体根目录名。
 variant_roots() {
   printf '%s\n' "$(printf '\056\137agent-cn')"
@@ -44,31 +54,38 @@ EOF
 # 测试可用 SUPERPOWERS_SKILLS_SRC 注入;否则 clone upstream 到临时目录。
 resolve_src() {
   if [ -n "${SUPERPOWERS_SKILLS_SRC:-}" ]; then
+    log INFO "Using injected skills source: $SUPERPOWERS_SKILLS_SRC/skills" >&2
     printf '%s\n' "$SUPERPOWERS_SKILLS_SRC/skills"
     return 0
   fi
   local tmp
   tmp="$(mktemp -d "${TMPDIR:-/tmp}/superpowers.XXXXXX")" || return 1
+  log INFO "Cloning upstream: $UPSTREAM_URL" >&2
   if ! git clone --depth 1 "$UPSTREAM_URL" "$tmp" >/dev/null 2>&1; then
+    log ERROR "git clone failed: $UPSTREAM_URL"
     rm -rf "$tmp"
     return 1
   fi
+  log INFO "Cloned upstream into: $tmp" >&2
   printf '%s\n' "$tmp/skills"
 }
 
 # remove_by_manifest: 按目标目录内 manifest 逐名删除本工程装入的 skill,并删 manifest。
 # 参数: $1=目标 skills 目录。返回 0 表示已按 manifest 处理;返回 1 表示无 manifest(交由回退)。
 remove_by_manifest() {
-  local dst="$1" name
+  local dst="$1" name count=0
   [ -f "$dst/$MANIFEST" ] || return 1
+  log INFO "Uninstalling by manifest: $dst/$MANIFEST"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
     if [ -d "$dst/$name" ]; then
-      printf 'Removing: %s\n' "$dst/$name"
+      log INFO "  - $name"
       rm -rf "$dst/$name"
+      count=$((count + 1))
     fi
   done < "$dst/$MANIFEST"
   rm -f "$dst/$MANIFEST"
+  log INFO "Removed $count skill(s) and manifest from: $dst"
   return 0
 }
 
@@ -76,9 +93,11 @@ main() {
   local dirs
   dirs="$(detect_skill_dirs)"
   if [ -z "$dirs" ]; then
-    printf 'Error: no Trae installation detected.\n' >&2
+    log ERROR "no Trae installation detected."
     return 3
   fi
+  log INFO "Detected target skill dirs:"
+  printf '%s\n' "$dirs"
 
   # 第一遍:凡有 manifest 的目标目录,直接按 manifest 卸载(离线可用)。
   # 收集仍需回退处理(无 manifest)的目标目录到 fallback_dirs。
@@ -89,6 +108,7 @@ main() {
     if remove_by_manifest "$d"; then
       : # 已按 manifest 处理
     else
+      log INFO "No manifest in $d; deferring to upstream-list fallback."
       fallback_dirs="$fallback_dirs
 $d"
     fi
@@ -98,18 +118,19 @@ EOF
 
   # 若所有目标都已按 manifest 处理完,无需获取上游清单。
   if [ -z "$(printf '%s' "$fallback_dirs" | tr -d '[:space:]')" ]; then
-    printf 'Done. Note: remove the Superpowers User Rules manually in Trae settings.\n'
+    log INFO "Done. Note: remove the Superpowers User Rules manually in Trae settings."
     return 0
   fi
 
   # 第二遍(回退):无 manifest 的目标,沿用"按上游清单反推删除"。
+  log INFO "Falling back to upstream-list uninstall for manifest-less dirs."
   local src
   if ! src="$(resolve_src)"; then
-    printf 'Error: failed to obtain superpowers skills list.\n' >&2
+    log ERROR "failed to obtain superpowers skills list."
     return 4
   fi
   if [ ! -d "$src" ]; then
-    printf 'Error: skills source not found: %s\n' "$src" >&2
+    log ERROR "skills source not found: $src"
     [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ] && rm -rf "$(dirname "$src")"
     return 4
   fi
@@ -118,12 +139,13 @@ EOF
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     [ -d "$d" ] || continue
+    log INFO "Uninstalling by upstream list in: $d"
     for entry in "$src"/*/; do
       [ -d "$entry" ] || continue
       name="$(basename "$entry")"
       if [ -d "$d/$name" ]; then
-        printf 'Removing: %s\n' "$d/$name"
-        rm -rf "$d/$name"
+        log INFO "  - $name"
+        rm -rf "${d:?}/${name:?}"
       fi
     done
   done <<EOF
@@ -131,10 +153,11 @@ $fallback_dirs
 EOF
 
   if [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ]; then
+    log INFO "Cleaning up temporary clone: $(dirname "$src")"
     rm -rf "$(dirname "$src")"
   fi
 
-  printf 'Done. Note: remove the Superpowers User Rules manually in Trae settings.\n'
+  log INFO "Done. Note: remove the Superpowers User Rules manually in Trae settings."
   return 0
 }
 
