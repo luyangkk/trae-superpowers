@@ -1,0 +1,49 @@
+.github/SECURITY.md
+  s_c093fc8530355f::t_4f4d7c266784de 16
+  s_c093fc8530355f::t_81b8287334000d 1-15,17-26
+tests/test_uninstall.sh
+  s_c093fc8530355f::t_3f7cd5d311f3a5 5
+LICENSE
+  s_c093fc8530355f::t_cf692d83d7b8b9 3
+tests/test_install.sh
+  s_c093fc8530355f::t_5742840360b76f 7
+README.md
+  s_c093fc8530355f::t_394fecf022b22f 3-6
+  s_c093fc8530355f::t_b57da4c5fe63bc 20,78,89
+tests/test_update.sh
+  s_c093fc8530355f::t_73cde301ed0755 6
+CONTRIBUTING.md
+  s_c093fc8530355f::t_aef169c9ff0ace 1-56
+CHANGELOG.md
+  s_c093fc8530355f::t_06cde42a16ece0 1-23
+README.zh-CN.md
+  s_c093fc8530355f::t_ee4f2b69d698e8 3-6
+  s_c093fc8530355f::t_c28b08662350ab 19,74,84
+.github/ISSUE_TEMPLATE/bug_report.md
+  s_c093fc8530355f::t_252715481f6d43 1-22
+.github/workflows/ci.yml
+  s_c093fc8530355f::t_581f1336c659da 30
+  s_c093fc8530355f::t_f94ff29f2178e8 27-29
+.github/ISSUE_TEMPLATE/feature_request.md
+  s_c093fc8530355f::t_030b7dea7c6a99 1-17
+.github/PULL_REQUEST_TEMPLATE.md
+  s_c093fc8530355f::t_c47aa5df158401 1-16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5dfc170b148bb3311ba5dc3a25719b2f8cd4c3fd",
+  "prompts": {},
+  "sessions": {
+    "s_c093fc8530355f": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a509b7bbc4570de6484cf3b",
+        "model": "openrouter-3o__dev"
+      },
+      "human_author": "陆阳 <luyang.kk@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {},
+  "remote_transcripts": {}
+}
