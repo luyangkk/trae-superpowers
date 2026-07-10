@@ -1,0 +1,30 @@
+name: CI
+
+# 在 push 到主分支和 PR 时运行；脚本纯离线测试，无需网络与密钥。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # 行为测试：在 Linux 与 macOS 上运行全量测试，验证跨平台一致性。
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run behavior tests
+        run: bash tests/run_all.sh
+
+  # 静态检查：用 shellcheck 扫描所有脚本，提前发现兼容性与语法问题。
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Run shellcheck
+        run: shellcheck -x install.sh update.sh uninstall.sh tests/*.sh tests/*.bash

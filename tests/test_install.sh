@@ -4,6 +4,7 @@
 # 这类连续词元的改写(本环境实测存在此改写)。
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tests/test_helpers.bash
 source "$HERE/test_helpers.bash"
 INSTALL="$HERE/../install.sh"
 

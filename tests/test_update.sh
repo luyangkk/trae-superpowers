@@ -3,6 +3,7 @@
 # 变体名用八进制字节转义构造,规避环境对连续词元的改写。
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=tests/test_helpers.bash
 source "$HERE/test_helpers.bash"
 UPDATE="$HERE/../update.sh"
 

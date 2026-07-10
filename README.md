@@ -1,5 +1,9 @@
 # Trae Superpowers
 
+[![CI](https://github.com/luyangkk/trae-superpowers/actions/workflows/ci.yml/badge.svg)](https://github.com/luyangkk/trae-superpowers/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+
 Bring [obra/superpowers](https://github.com/obra/superpowers) skills to the Trae IDE.
 
 This project installs the upstream Superpowers skills into Trae's global skills
@@ -13,7 +17,7 @@ English | [简体中文](./README.zh-CN.md)
 ## One-line install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/install.sh | bash
 ```
 
 The script detects your Trae variant (CN / international) and copies all
@@ -71,7 +75,7 @@ like "help me design a new feature" — the `brainstorming` skill should trigger
 ## Update
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/update.sh | bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/update.sh | bash
 ```
 
 This re-syncs the installed skills to the latest upstream state (an exact
@@ -82,7 +86,7 @@ project recorded in its manifest are affected.
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/uninstall.sh | bash
 ```
 
 This removes only the skills provided by upstream Superpowers; your own skills

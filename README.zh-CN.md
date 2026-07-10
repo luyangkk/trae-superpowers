@@ -1,5 +1,9 @@
 # Trae Superpowers
 
+[![CI](https://github.com/luyangkk/trae-superpowers/actions/workflows/ci.yml/badge.svg)](https://github.com/luyangkk/trae-superpowers/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
+![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey)
+
 让 [obra/superpowers](https://github.com/obra/superpowers) 的技能在 Trae IDE 中生效。
 
 本工程把 upstream Superpowers 的 skills 安装到 Trae 的全局技能目录,并用 Trae 的
@@ -12,7 +16,7 @@
 ## 一键安装
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/install.sh | bash
 ```
 
 脚本会自动探测你的 Trae 版本(国内版 / 国际版),把全部 upstream skills 复制到正确的
@@ -67,7 +71,7 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 ## 更新
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/update.sh | bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/update.sh | bash
 ```
 
 把已安装的 skills 精确镜像到上游最新状态:更新变动内容,并移除上游已删除的
@@ -77,7 +81,7 @@ skill。绝不触碰你自己安装的 skill —— 只有本工程 manifest 记
 ## 卸载
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/uninstall.sh | bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/uninstall.sh | bash
 ```
 
 仅移除 upstream Superpowers 提供的技能,不会动你自己的技能。存在 manifest 时按清单
