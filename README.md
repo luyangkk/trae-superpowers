@@ -29,12 +29,10 @@ Trae.
 
 ## Configure User Rules
 
-This step is required for **both** install paths. User Rules replace the
-upstream SessionStart hook, so the agent checks for a relevant skill before
-every task.
-
-Open Trae Settings (`Cmd + ,` / `Ctrl + ,`) → **Rules & Skills > Rules**, edit
-**User Rules**, paste the following, and save:
+`install.sh` and `update.sh` now write this rule automatically into each Trae
+variant's `user_rules/` directory. **Restart Trae, then open Settings > Rules
+to confirm the rule appears.** If it does not, the content is already in place —
+paste it manually as a fallback using the text below:
 
 ```
 **Superpowers Skills System**
@@ -110,7 +108,7 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/unin
 This removes only the skills provided by upstream Superpowers; your own skills
 are left untouched. When a manifest is present it uninstalls precisely from that
 list (no network needed); otherwise it falls back to the upstream skill list.
-Remove the User Rules manually in Trae Settings.
+It also removes the User Rule this project wrote (matched by a hidden marker); rules you added yourself are left untouched.
 
 ## How it works
 
