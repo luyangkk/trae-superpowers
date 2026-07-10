@@ -45,6 +45,39 @@ assert_dir_absent() {
   fi
 }
 
+# assert_file_exists: 断言文件存在。参数: $1=路径 $2=用例描述
+assert_file_exists() {
+  if [ -f "$1" ]; then
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    printf 'PASS: %s\n' "$2"
+  else
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    printf 'FAIL: %s (missing file: %s)\n' "$2" "$1"
+  fi
+}
+
+# assert_file_absent: 断言文件不存在。参数: $1=路径 $2=用例描述
+assert_file_absent() {
+  if [ ! -f "$1" ]; then
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    printf 'PASS: %s\n' "$2"
+  else
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    printf 'FAIL: %s (unexpected file: %s)\n' "$2" "$1"
+  fi
+}
+
+# assert_file_contains: 断言文件按整行包含某字符串。参数: $1=路径 $2=期望整行内容 $3=用例描述
+assert_file_contains() {
+  if [ -f "$1" ] && grep -qx "$2" "$1"; then
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    printf 'PASS: %s\n' "$3"
+  else
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    printf 'FAIL: %s (file %s missing line: %s)\n' "$3" "$1" "$2"
+  fi
+}
+
 # assert_exit_code: 断言退出码。参数: $1=期望码 $2=实际码 $3=用例描述
 assert_exit_code() {
   if [ "$1" = "$2" ]; then
