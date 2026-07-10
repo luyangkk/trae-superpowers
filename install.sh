@@ -11,6 +11,38 @@ UPSTREAM_URL="${SUPERPOWERS_UPSTREAM_URL:-https://github.com/obra/superpowers.gi
 # manifest 文件名:记录本工程装入的 skill 名单,供 update/uninstall 精确定位。
 MANIFEST=".superpowers-manifest"
 
+# MARKER: 本工程写入 User Rules 的标记(规则文件首行)。update/uninstall 据此识别与覆盖/删除,
+# 确保幂等且不触碰用户自有规则。三个脚本共享同一字面量。
+MARKER="<!-- trae-superpowers-managed-rule -->"
+
+# RULE_BODY: 完整版 Superpowers User Rules 文本(含 Trae subagent 适配段)。
+# 单一事实源以本脚本为准;update.sh 须保持逐字一致。
+RULE_BODY="$(cat <<'RULEEOF'
+**Superpowers Skills System**
+You have superpowers skills installed globally. Before ANY task (coding, debugging, planning, reviewing), you MUST check if a relevant skill exists and invoke it.
+If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST invoke the skill. This is not optional.
+
+**Skill Priority**
+1. **Process skills first** (brainstorming, systematic-debugging) - determine HOW to approach the task
+2. **Implementation skills second** (test-driven-development) - guide execution details
+
+**Red Flags (Common excuses to skip skills)**
+- "This is just a simple question" -> check skills
+- "Let me just do this one thing first" -> check skills first
+- "This skill is too heavy" -> use it
+- "I need to understand more first" -> skill check before any action
+
+**Platform Adaptation (Trae)**
+When a skill says to "dispatch a subagent" (e.g. subagent-driven-development, dispatching-parallel-agents), use the native Agent tool:
+- Dispatch = call the Agent tool with subagent_type "general-purpose". Do NOT pass a model parameter — let the subagent inherit the current session model. Trae routes models through its own gateway (e.g. openrouter-*), so hard-coded names like "sonnet"/"opus" that other Superpowers docs recommend are often unavailable and abort the run with error 4023 "The current model is unavailable".
+- Ignore the "always specify the model explicitly" instruction in subagent-driven-development's Model Selection section when on Trae; it assumes model names Trae may not serve.
+- Parallel = issue multiple Agent calls in one response, or use run_in_background for async work.
+- Continue an existing subagent's context = SendMessage; a new Agent call starts fresh.
+- Task tracking ("create a todo / mark complete") = TaskCreate / TaskUpdate / TaskList.
+Trae fully supports subagents through these tools — never treat "dispatch a subagent" as unsupported.
+RULEEOF
+)"
+
 # log: 统一日志输出。参数: $1=级别(INFO/WARN/ERROR) $2..=消息。
 # ERROR 走 stderr,其余走 stdout,便于 grep 过滤与错误重定向;不带时间戳保持简洁。
 log() {
@@ -48,6 +80,28 @@ detect_skill_dirs() {
         *) seen="$seen $real"; printf '%s\n' "$c" ;;
       esac
     fi
+  done <<EOF
+$(variant_roots)
+EOF
+}
+
+# detect_user_rules_dirs: 探测已安装 Trae 变体的 user_rules 目录,逐行输出(已去重真实路径)。
+# 命中条件:变体根目录存在(user_rules 子目录可能尚未创建,由 write_rule 负责 mkdir -p)。
+detect_user_rules_dirs() {
+  local seen="" root c real
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    [ -d "$HOME/$root" ] || continue
+    c="$HOME/$root/user_rules"
+    if [ -d "$c" ]; then
+      real="$(cd "$c" 2>/dev/null && pwd -P)"
+    else
+      real="$c"
+    fi
+    case " $seen " in
+      *" $real "*) : ;;                 # 已去重,跳过软链接别名
+      *) seen="$seen $real"; printf '%s\n' "$c" ;;
+    esac
   done <<EOF
 $(variant_roots)
 EOF
@@ -110,6 +164,33 @@ write_manifest() {
   log INFO "Wrote manifest: $dst/$MANIFEST"
 }
 
+# write_rule: 幂等地把 Superpowers User Rules 写入目标 user_rules 目录。
+# 扫描带 MARKER 的 *.md:命中则覆盖第一个(多命中时删除多余的,收敛为唯一);
+# 未命中则新建 rule-<epoch>000.md(仿 Trae 原生 rule-<ms> 命名)。
+# 只碰带 MARKER 的文件,不触碰用户自有规则。
+# 参数: $1=目标 user_rules 目录
+write_rule() {
+  local dir="$1" target="" f
+  mkdir -p "$dir"
+  # 收集已存在的带标记文件
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] || continue
+    if grep -q "$MARKER" "$f"; then
+      if [ -z "$target" ]; then
+        target="$f"                     # 第一个命中作为覆盖目标
+      else
+        rm -f "$f"                       # 多余的重复标记文件,删除以收敛为唯一
+        log WARN "removed duplicate managed rule: $f"
+      fi
+    fi
+  done
+  if [ -z "$target" ]; then
+    target="$dir/rule-$(date +%s)000.md" # 首次创建:仿原生命名
+  fi
+  printf '%s\n%s\n' "$MARKER" "$RULE_BODY" > "$target"
+  log INFO "Wrote User Rule: $target"
+}
+
 main() {
   local dirs
   dirs="$(detect_skill_dirs)"
@@ -141,13 +222,22 @@ main() {
 $dirs
 EOF
 
+  # 自动写入 User Rules(尽力而为:写入后需重启 Trae 验收;失败可 UI 手动回退)。
+  local rdir
+  while IFS= read -r rdir; do
+    [ -n "$rdir" ] || continue
+    write_rule "$rdir"
+  done <<EOF
+$(detect_user_rules_dirs)
+EOF
+
   # 若为临时 clone(非注入源),安装后清理
   if [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ]; then
     log INFO "Cleaning up temporary clone: $(dirname "$src")"
     rm -rf "$(dirname "$src")"
   fi
 
-  log INFO "Done. Next: configure User Rules in Trae settings, then restart."
+  log INFO "Done. Restart Trae, then check Settings > Rules to confirm the rule appears."
   return 0
 }
 

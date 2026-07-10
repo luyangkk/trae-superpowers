@@ -40,6 +40,21 @@ t_variant_case() {
   rm -rf "$home" "$src"
 }
 
+# 用例9: 命中变体时,规则被写入该变体的 user_rules 目录,且内容带标记与关键段落。
+t_writes_user_rule() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "写规则场景退出码为 0"
+  # user_rules 目录下应恰好有一个带标记的规则文件
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
+  assert_file_exists "$marked" "user_rules 下存在带标记的规则文件"
+  assert_file_contains "$marked" "**Superpowers Skills System**" "规则含 Superpowers 触发段"
+  assert_file_contains "$marked" "**Platform Adaptation (Trae)**" "规则含 Trae 适配段"
+  rm -rf "$home" "$src"
+}
+
 # 用例7: 重复安装(目标 skill 已存在)→ 合并覆盖,不产生嵌套目录、顶层内容刷新为新版。
 # 回归防护:逐 skill 的 cp -R "$src/$name" "$dst/$name" 在 dst 已存在时会嵌套并残留旧内容。
 t_reinstall_no_nesting() {
@@ -90,4 +105,5 @@ t_variant_case "$V_TRAE" "trae"
 t_reinstall_no_nesting
 t_copy_failure_skips_manifest
 t_dedup_symlink
+t_writes_user_rule
 finish_tests
