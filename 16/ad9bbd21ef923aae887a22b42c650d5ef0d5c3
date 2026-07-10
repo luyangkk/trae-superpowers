@@ -1,0 +1,104 @@
+tests/test_uninstall.sh
+  s_02dfd4314945df::t_bcda240619267d 1-26 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a508a1fbc4570de6484cbbc","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,26]}]}]}
+uninstall.sh
+  s_02dfd4314945df::t_4790bb714b7077 1-100 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6a508a33bc4570de6484cbc2","tool_type":"agent","tool_id":"Write","line_ranges":[{"Range":[1,100]}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "16ad9bbd21ef923aae887a22b42c650d5ef0d5c3",
+  "prompts": {},
+  "sessions": {
+    "s_02dfd4314945df": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6a506e4d393ce864b1630855",
+        "model": "openrouter-3o__dev"
+      },
+      "human_author": "陆阳 <luyang.kk@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "tests/test_uninstall.sh": [
+      {
+        "hash": "s_02dfd4314945df::t_bcda240619267d",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              26
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a508a1fbc4570de6484cbbc",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  26
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "uninstall.sh": [
+      {
+        "hash": "s_02dfd4314945df::t_4790bb714b7077",
+        "line_ranges": [
+          {
+            "Range": [
+              1,
+              100
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6a508a33bc4570de6484cbc2",
+            "tool_type": "agent",
+            "tool_id": "Write",
+            "line_ranges": [
+              {
+                "Range": [
+                  1,
+                  100
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_02dfd4314945df": {
+      "tool": "trae",
+      "conversation_id": "6a506e4d393ce864b1630855",
+      "session_id": "6a506e4d393ce864b1630855",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_02dfd4314945df::t_4790bb714b7077": {
+      "tool": "trae",
+      "conversation_id": "6a506e4d393ce864b1630855",
+      "session_id": "6a506e4d393ce864b1630855",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_02dfd4314945df::t_bcda240619267d": {
+      "tool": "trae",
+      "conversation_id": "6a506e4d393ce864b1630855",
+      "session_id": "6a506e4d393ce864b1630855",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
