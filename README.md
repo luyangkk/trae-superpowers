@@ -24,27 +24,14 @@ The script detects your Trae variant (CN / international) and copies all
 upstream skills into the correct global skills directory. It supports macOS,
 Linux, and Windows (Git Bash / WSL).
 
-After it finishes, complete **Configure User Rules** below and restart Trae.
+After it finishes, [configure User Rules](#configure-user-rules) and restart
+Trae.
 
-## Manual install (advanced)
+## Configure User Rules
 
-### Step 1: Clone upstream and copy skills
-
-```bash
-git clone --depth 1 https://github.com/obra/superpowers.git /tmp/superpowers
-
-# Global skills dir. CN version uses ~/.trae-cn; international uses ~/.trae.
-mkdir -p ~/.trae-cn/skills
-cp -R /tmp/superpowers/skills/. ~/.trae-cn/skills/
-
-rm -rf /tmp/superpowers
-```
-
-For the international version, replace `.trae-cn` with `.trae`. The one-line
-installer additionally probes `._agent-cn` / `._agent` in case your setup uses
-those names, so you don't have to guess.
-
-### Step 2: Configure User Rules
+This step is required for **both** install paths. User Rules replace the
+upstream SessionStart hook, so the agent checks for a relevant skill before
+every task.
 
 Open Trae Settings (`Cmd + ,` / `Ctrl + ,`) → **Rules & Skills > Rules**, edit
 **User Rules**, paste the following, and save:
@@ -65,12 +52,34 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 - "I need to understand more first" -> skill check before any action
 ```
 
-### Step 3: Verify
+Restart Trae after saving so the rules take effect.
+
+## Manual install (advanced)
+
+### Step 1: Clone upstream and copy skills
+
+```bash
+git clone --depth 1 https://github.com/obra/superpowers.git /tmp/superpowers
+
+# Global skills dir. CN version uses ~/._agent-cn; international uses ~/._agent.
+mkdir -p ~/._agent-cn/skills
+cp -R /tmp/superpowers/skills/. ~/._agent-cn/skills/
+
+rm -rf /tmp/superpowers
+```
+
+For the international version, replace `._agent-cn` with `._agent`. The one-line
+installer additionally probes `.trae-cn` / `.trae` in case your setup uses
+those names, so you don't have to guess.
+
+After copying the skills, [configure User Rules](#configure-user-rules).
+
+### Step 2: Verify
 
 Restart Trae. Go to **Settings > Rules & Skills > Skills** and confirm the
 upstream Superpowers skills are loaded (type: Global). The count tracks the
 upstream repo, so it may change over time. In a new session, type a request
-like "help me design a new feature" — the `brainstorming` skill should trigger.
+like "help me design a new feature"—the `brainstorming` skill should trigger.
 
 ## Update
 
@@ -80,7 +89,7 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/upda
 
 This re-syncs the installed skills to the latest upstream state (an exact
 mirror): it updates changed content and removes skills that upstream has
-deleted. It never touches skills you installed yourself — only skills this
+deleted. It never touches skills you installed yourself—only skills this
 project recorded in its manifest are affected.
 
 ## Uninstall
@@ -100,10 +109,10 @@ Remove the User Rules manually in Trae Settings.
   every project.
 - **User Rules** replace the upstream SessionStart hook, instructing the agent
   to check for a relevant skill before any task.
-- **Manifest** — a `.superpowers-manifest` file in each skills directory records
+- **Manifest**—a `.superpowers-manifest` file in each skills directory records
   which skills this project installed, so update and uninstall can target them
   precisely without touching your own skills. Do not edit it by hand.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT—see [LICENSE](./LICENSE).

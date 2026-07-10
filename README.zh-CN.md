@@ -22,26 +22,12 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/inst
 脚本会自动探测你的 Trae 版本(国内版 / 国际版),把全部 upstream skills 复制到正确的
 全局技能目录。支持 macOS、Linux 和 Windows(Git Bash / WSL)。
 
-完成后请按下方「配置 User Rules」操作并重启 Trae。
+完成后请[配置 User Rules](#配置-user-rules)并重启 Trae。
 
-## 手动安装(进阶)
+## 配置 User Rules
 
-### Step 1: 克隆 upstream 并复制 Skills
-
-```bash
-git clone --depth 1 https://github.com/obra/superpowers.git /tmp/superpowers
-
-# 全局技能目录。国内版用 ~/.trae-cn;国际版用 ~/.trae。
-mkdir -p ~/.trae-cn/skills
-cp -R /tmp/superpowers/skills/. ~/.trae-cn/skills/
-
-rm -rf /tmp/superpowers
-```
-
-国际版请把 `.trae-cn` 换成 `.trae`。一键脚本还会额外探测 `._agent-cn` / `._agent`,
-以兼容使用这些命名的环境,你无需自己判断。
-
-### Step 2: 配置 User Rules
+这一步对**两种安装方式都必需**。User Rules 替代 upstream 原生的 SessionStart
+Hook,要求 agent 在任何任务前先检查是否有匹配的技能。
 
 打开 Trae 设置(`Cmd + ,` / `Ctrl + ,`)→ **Rules & Skills > Rules**,编辑
 **User Rules**,粘贴以下内容并保存:
@@ -62,7 +48,28 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 - "I need to understand more first" -> skill check before any action
 ```
 
-### Step 3: 验证安装
+保存后重启 Trae,规则即可生效。
+
+## 手动安装(进阶)
+
+### Step 1: 克隆 upstream 并复制 Skills
+
+```bash
+git clone --depth 1 https://github.com/obra/superpowers.git /tmp/superpowers
+
+# 全局技能目录。国内版用 ~/._agent-cn;国际版用 ~/._agent。
+mkdir -p ~/._agent-cn/skills
+cp -R /tmp/superpowers/skills/. ~/._agent-cn/skills/
+
+rm -rf /tmp/superpowers
+```
+
+国际版请把 `._agent-cn` 换成 `._agent`。一键脚本还会额外探测 `.trae-cn` / `.trae`,
+以兼容使用这些命名的环境,你无需自己判断。
+
+复制完技能后,请[配置 User Rules](#配置-user-rules)。
+
+### Step 2: 验证安装
 
 重启 Trae。进入 **Settings > Rules & Skills > Skills**,确认 upstream Superpowers
 的技能已加载(类型为 Global)。数量随上游仓库变化,可能变动。新建会话输入类似
