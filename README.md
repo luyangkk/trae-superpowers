@@ -50,6 +50,15 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 - "Let me just do this one thing first" -> check skills first
 - "This skill is too heavy" -> use it
 - "I need to understand more first" -> skill check before any action
+
+**Platform Adaptation (Trae)**
+When a skill says to "dispatch a subagent" (e.g. subagent-driven-development, dispatching-parallel-agents), use the native Agent tool:
+- Dispatch = call the Agent tool with subagent_type "general-purpose". Do NOT pass a model parameter — let the subagent inherit the current session model. Trae routes models through its own gateway (e.g. openrouter-*), so hard-coded names like "sonnet"/"opus" that other Superpowers docs recommend are often unavailable and abort the run with error 4023 "The current model is unavailable".
+- Ignore the "always specify the model explicitly" instruction in subagent-driven-development's Model Selection section when on Trae; it assumes model names Trae may not serve.
+- Parallel = issue multiple Agent calls in one response, or use run_in_background for async work.
+- Continue an existing subagent's context = SendMessage; a new Agent call starts fresh.
+- Task tracking ("create a todo / mark complete") = TaskCreate / TaskUpdate / TaskList.
+Trae fully supports subagents through these tools — never treat "dispatch a subagent" as unsupported.
 ```
 
 Restart Trae after saving so the rules take effect.
