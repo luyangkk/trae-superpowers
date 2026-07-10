@@ -40,6 +40,36 @@ t_variant_case() {
   rm -rf "$home" "$src"
 }
 
+# 用例7: 重复安装(目标 skill 已存在)→ 合并覆盖,不产生嵌套目录、顶层内容刷新为新版。
+# 回归防护:逐 skill 的 cp -R "$src/$name" "$dst/$name" 在 dst 已存在时会嵌套并残留旧内容。
+t_reinstall_no_nesting() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills/using-superpowers"       # 预置"已装过"的旧内容
+  printf 'old\n' > "$home/$V_AGENT_CN/skills/using-superpowers/SKILL.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  printf 'new\n' > "$src/skills/using-superpowers/SKILL.md"   # 新源为不同内容
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "重复安装退出码为 0"
+  assert_dir_absent "$home/$V_AGENT_CN/skills/using-superpowers/using-superpowers" "重复安装不产生嵌套目录"
+  assert_file_contains "$home/$V_AGENT_CN/skills/using-superpowers/SKILL.md" "new" "重复安装顶层内容刷新为新版"
+  rm -rf "$home" "$src"
+}
+
+# 用例8: 某个 skill 复制失败(目标名被普通文件占位)→ 不计入 manifest,其余 skill 正常。
+# 遵循设计 §8:cp 失败打印警告、继续,manifest 不声称未成功装入的 skill。
+t_copy_failure_skips_manifest() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills"
+  printf 'iamfile\n' > "$home/$V_AGENT_CN/skills/skill-b"     # 占位文件,令 skill-b 复制失败
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a skill-b
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "复制失败场景退出码为 0"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-a" "未受影响的 skill-a 正常安装"
+  assert_file_contains "$home/$V_AGENT_CN/skills/.superpowers-manifest" "skill-a" "manifest 含成功的 skill-a"
+  assert_file_absent_line "$home/$V_AGENT_CN/skills/.superpowers-manifest" "skill-b" "manifest 不含失败的 skill-b"
+  rm -rf "$home" "$src"
+}
+
 # 用例6: 一个变体根是另一个的软链接别名 → pwd -P 去重后只安装一次
 t_dedup_symlink() {
   local home; home="$(make_temp_home)"
@@ -57,5 +87,7 @@ t_variant_case "$V_AGENT_CN" "agent-cn"
 t_variant_case "$V_AGENT" "agent"
 t_variant_case "$V_TRAE_CN" "trae-cn"
 t_variant_case "$V_TRAE" "trae"
+t_reinstall_no_nesting
+t_copy_failure_skips_manifest
 t_dedup_symlink
 finish_tests

@@ -78,6 +78,17 @@ assert_file_contains() {
   fi
 }
 
+# assert_file_absent_line: 断言文件不含某整行(或文件不存在)。参数: $1=路径 $2=不期望整行 $3=用例描述
+assert_file_absent_line() {
+  if [ ! -f "$1" ] || ! grep -qx "$2" "$1"; then
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    printf 'PASS: %s\n' "$3"
+  else
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    printf 'FAIL: %s (file %s unexpectedly contains line: %s)\n' "$3" "$1" "$2"
+  fi
+}
+
 # assert_exit_code: 断言退出码。参数: $1=期望码 $2=实际码 $3=用例描述
 assert_exit_code() {
   if [ "$1" = "$2" ]; then

@@ -72,6 +72,8 @@ resolve_src() {
 }
 
 # mirror_skills: 对新源里每个 skill 做逐 skill 清替(先删后拷),实现目录级镜像。
+# 先 rm 再 cp,故 dst/$name 不会残留旧文件、也不会嵌套。
+# 单个 skill 复制失败时打印警告并跳过,不中断其余 skill(设计 §8)。
 # 参数: $1=源 skills 目录  $2=目标 skills 目录
 mirror_skills() {
   local src="$1" dst="$2" entry name count=0
@@ -80,14 +82,18 @@ mirror_skills() {
     [ -d "$entry" ] || continue
     name="$(basename "$entry")"
     rm -rf "${dst:?}/${name:?}"
-    cp -R "$src/$name" "$dst/$name"
-    log INFO "  ~ $name"
-    count=$((count + 1))
+    if cp -R "$src/$name" "$dst/$name"; then
+      log INFO "  ~ $name"
+      count=$((count + 1))
+    else
+      log WARN "mirror failed, skipped: $name"
+    fi
   done
   log INFO "Mirrored $count skill(s) into: $dst"
 }
 
 # write_manifest: 把源目录下所有 skill 名逐行写入目标 manifest(覆盖)。
+# 仅记录实际已落入 dst 的 skill(目录存在),避免声称镜像失败的 skill(设计 §8)。
 # 参数: $1=源 skills 目录  $2=目标 skills 目录
 write_manifest() {
   local src="$1" dst="$2" entry name
@@ -95,6 +101,7 @@ write_manifest() {
   for entry in "$src"/*/; do
     [ -d "$entry" ] || continue
     name="$(basename "$entry")"
+    [ -d "$dst/$name" ] || continue       # 未成功镜像的 skill 不写入 manifest
     printf '%s\n' "$name" >> "$dst/$MANIFEST"
   done
   log INFO "Wrote manifest: $dst/$MANIFEST"

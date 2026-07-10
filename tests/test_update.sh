@@ -49,6 +49,7 @@ t_remove_orphan() {
   assert_dir_exists "$home/$V_AGENT_CN/skills/skill-a" "保留仍在上游的 skill-a"
   assert_dir_absent "$home/$V_AGENT_CN/skills/skill-b" "删除上游已移除的孤儿 skill-b"
   assert_file_absent "$home/$V_AGENT_CN/skills/skill-b/SKILL.md" "孤儿 skill-b 内容一并清除"
+  assert_file_absent_line "$home/$V_AGENT_CN/skills/$MANIFEST" "skill-b" "重写后 manifest 不再含孤儿 skill-b"
   rm -rf "$home" "$src"
 }
 

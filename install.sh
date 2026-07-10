@@ -76,20 +76,27 @@ resolve_src() {
 
 # copy_skills: 把源目录下所有 skill 逐个复制到目标 skills 目录,并逐条打印。
 # 参数: $1=源 skills 目录  $2=目标 skills 目录
+# 用 "cp -R $src/$name $dst/"(拷进 dst 根)保持合并覆盖语义:重复安装时刷新同名内容,
+# 不会像 "cp -R $src/$name $dst/$name" 那样在 dst/$name 已存在时嵌套成 dst/$name/$name。
+# 单个 skill 复制失败时打印警告并跳过,不中断其余 skill(设计 §8)。
 copy_skills() {
   local src="$1" dst="$2" entry name count=0
   mkdir -p "$dst"
   for entry in "$src"/*/; do
     [ -d "$entry" ] || continue
     name="$(basename "$entry")"
-    cp -R "$src/$name" "$dst/$name"
-    log INFO "  + $name"
-    count=$((count + 1))
+    if cp -R "$src/$name" "$dst/"; then
+      log INFO "  + $name"
+      count=$((count + 1))
+    else
+      log WARN "copy failed, skipped: $name"
+    fi
   done
   log INFO "Copied $count skill(s) into: $dst"
 }
 
 # write_manifest: 把源目录下所有 skill 名逐行写入目标 skills 目录的 manifest。
+# 仅记录实际已落入 dst 的 skill(目录存在),避免声称复制失败的 skill(设计 §8)。
 # 参数: $1=源 skills 目录  $2=目标 skills 目录
 write_manifest() {
   local src="$1" dst="$2" entry name
@@ -97,6 +104,7 @@ write_manifest() {
   for entry in "$src"/*/; do
     [ -d "$entry" ] || continue
     name="$(basename "$entry")"
+    [ -d "$dst/$name" ] || continue       # 未成功装入 dst 的 skill 不写入 manifest
     printf '%s\n' "$name" >> "$dst/$MANIFEST"
   done
   log INFO "Wrote manifest: $dst/$MANIFEST"
