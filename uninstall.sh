@@ -122,7 +122,7 @@ remove_managed_rule() {
   [ -d "$dir" ] || return 0
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
-    if grep -q "$MARKER" "$f"; then
+    if grep -qF "$MARKER" "$f"; then
       log INFO "  - $f"
       rm -f "$f"
       count=$((count + 1))

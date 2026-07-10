@@ -129,6 +129,20 @@ t_dedup_symlink() {
   rm -rf "$home" "$src"
 }
 
+# 用例12: 已存在多个带标记文件(异常残留)时,安装收敛为唯一带标记文件。
+# 正向覆盖 write_rule 里"多命中时删除多余标记文件"的 rm -f 分支。
+t_user_rule_converges_multiple() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/user_rules"
+  printf '<!-- trae-superpowers-managed-rule -->\nold a\n' > "$home/$V_AGENT_CN/user_rules/rule-a.md"
+  printf '<!-- trae-superpowers-managed-rule -->\nold b\n' > "$home/$V_AGENT_CN/user_rules/rule-b.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
+  assert_exit_code 1 "$n" "多个带标记文件时安装收敛为唯一"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
 t_variant_case "$V_AGENT_CN" "agent-cn"
 t_variant_case "$V_AGENT" "agent"
@@ -140,4 +154,5 @@ t_dedup_symlink
 t_writes_user_rule
 t_user_rule_idempotent
 t_user_rule_preserves_user_files
+t_user_rule_converges_multiple
 finish_tests

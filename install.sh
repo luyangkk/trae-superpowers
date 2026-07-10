@@ -175,7 +175,7 @@ write_rule() {
   # 收集已存在的带标记文件
   for f in "$dir"/*.md; do
     [ -f "$f" ] || continue
-    if grep -q "$MARKER" "$f"; then
+    if grep -qF "$MARKER" "$f"; then
       if [ -z "$target" ]; then
         target="$f"                     # 第一个命中作为覆盖目标
       else
