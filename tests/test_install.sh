@@ -36,9 +36,22 @@ t_variant_case() {
   rm -rf "$home" "$src"
 }
 
+# 用例6: 一个变体根是另一个的软链接别名 → pwd -P 去重后只安装一次
+t_dedup_symlink() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills"       # 真实变体根
+  ln -s "$home/$V_AGENT_CN" "$home/$V_TRAE_CN"   # 另一变体名软链到它
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "软链接别名场景退出码为 0"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/using-superpowers" "别名场景 skill 已安装"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
 t_variant_case "$V_AGENT_CN" "agent-cn"
 t_variant_case "$V_AGENT" "agent"
 t_variant_case "$V_TRAE_CN" "trae-cn"
 t_variant_case "$V_TRAE" "trae"
+t_dedup_symlink
 finish_tests
