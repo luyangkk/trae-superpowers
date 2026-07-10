@@ -5,3 +5,7 @@ tests/tmp/
 # 编辑器
 .idea/
 .vscode/
+# superpowers 相关文档（AI 开发过程产生的 plans/specs，不提交到 GitHub）
+docs/superpowers/
+# AI 编码代理指引（本地私有，不提交到 GitHub）
+CLAUDE.md
