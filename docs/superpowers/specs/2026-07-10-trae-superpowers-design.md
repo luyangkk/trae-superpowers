@@ -108,9 +108,22 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 - "I need to understand more first" -> skill check before any action
 ```
 
-## 9. 非目标(YAGNI)
+## 9. 支持的操作系统
+
+Trae IDE 仅发行 macOS 与 Windows,故:
+
+- **macOS**:原生运行 `install.sh` / `uninstall.sh`(bash/zsh)。
+- **Windows**:在 **Git Bash 或 WSL** 中运行同一套 `install.sh` / `uninstall.sh`。
+  bash 环境下 `$HOME/.trae-cn`、`$HOME/.trae` 路径可正常解析,无需第二套脚本。
+- **Linux**:非目标(Trae 无 Linux 发行版)。
+
+单一 bash 脚本覆盖两个系统,不额外维护 PowerShell 脚本。README 双语均在开头标注
+「Windows 用户请在 Git Bash 或 WSL 中运行」。
+
+## 10. 非目标(YAGNI)
 
 - 不翻译 skills 内容。
 - 不自动写入 User Rules。
 - 不修改 upstream skill 文件(含 description)。
-- 不做 Windows 原生脚本(README 说明 Windows 用户可在 Git Bash / WSL 运行;路径为 `%USERPROFILE%\.trae-cn` 等,由文档补充说明)。
+- 不写 Windows 原生 PowerShell 脚本(Windows 经 Git Bash / WSL 复用 bash 脚本)。
+- 不支持 Linux。
