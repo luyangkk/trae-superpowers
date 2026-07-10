@@ -57,6 +57,31 @@ resolve_src() {
   printf '%s\n' "$tmp/skills"
 }
 
+# mirror_skills: 对新源里每个 skill 做逐 skill 清替(先删后拷),实现目录级镜像。
+# 参数: $1=源 skills 目录  $2=目标 skills 目录
+mirror_skills() {
+  local src="$1" dst="$2" entry name
+  mkdir -p "$dst"
+  for entry in "$src"/*/; do
+    [ -d "$entry" ] || continue
+    name="$(basename "$entry")"
+    rm -rf "$dst/$name"
+    cp -R "$src/$name" "$dst/$name"
+  done
+}
+
+# write_manifest: 把源目录下所有 skill 名逐行写入目标 manifest(覆盖)。
+# 参数: $1=源 skills 目录  $2=目标 skills 目录
+write_manifest() {
+  local src="$1" dst="$2" entry name
+  : > "$dst/$MANIFEST"
+  for entry in "$src"/*/; do
+    [ -d "$entry" ] || continue
+    name="$(basename "$entry")"
+    printf '%s\n' "$name" >> "$dst/$MANIFEST"
+  done
+}
+
 main() {
   local dirs
   dirs="$(detect_skill_dirs)"
@@ -65,6 +90,33 @@ main() {
     return 3
   fi
   printf 'Detected target skill dirs:\n%s\n' "$dirs"
+
+  local src
+  if ! src="$(resolve_src)"; then
+    printf 'Error: failed to obtain superpowers skills source.\n' >&2
+    return 4
+  fi
+  if [ ! -d "$src" ]; then
+    printf 'Error: skills source not found: %s\n' "$src" >&2
+    [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ] && rm -rf "$(dirname "$src")"
+    return 4
+  fi
+
+  local d
+  while IFS= read -r d; do
+    [ -n "$d" ] || continue
+    printf 'Updating skills in: %s\n' "$d"
+    mirror_skills "$src" "$d"
+    write_manifest "$src" "$d"
+  done <<EOF
+$dirs
+EOF
+
+  if [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ]; then
+    rm -rf "$(dirname "$src")"
+  fi
+
+  printf 'Done. Skills updated to latest upstream.\n'
   return 0
 }
 

@@ -18,5 +18,24 @@ t_no_variant() {
   rm -rf "$home" "$src"
 }
 
+# 用例2: 旧装 A,B → 新源 A,B,C。全部就位,manifest 含三者。
+t_basic_update() {
+  local home; home="$(make_temp_home)"
+  # 预置:变体已装 A,B 且 manifest 记录二者
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-a"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-b"
+  printf 'skill-a\nskill-b\n' > "$home/$V_AGENT_CN/skills/$MANIFEST"
+  # 新上游源含 A,B,C
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a skill-b skill-c
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "基本更新退出码为 0"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-a" "更新后 skill-a 存在"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-b" "更新后 skill-b 存在"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-c" "新增 skill-c 存在"
+  assert_file_contains "$home/$V_AGENT_CN/skills/$MANIFEST" "skill-c" "manifest 含新增 skill-c"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
+t_basic_update
 finish_tests
