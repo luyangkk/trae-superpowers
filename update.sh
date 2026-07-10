@@ -82,6 +82,21 @@ write_manifest() {
   done
 }
 
+# remove_orphans: 删除孤儿 skill —— 旧 manifest 记录过、但新源已不再提供的 skill。
+# 严格限定 manifest 范围,绝不触碰未记录的用户自有 skill。
+# 参数: $1=源 skills 目录  $2=目标 skills 目录
+remove_orphans() {
+  local src="$1" dst="$2" name
+  [ -f "$dst/$MANIFEST" ] || return 0     # 无旧 manifest → 无孤儿可删(降级)
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue            # 跳过空行
+    if [ ! -d "$src/$name" ]; then        # 旧记录的 skill 已不在新源 → 孤儿
+      printf 'Removing orphan skill: %s\n' "$dst/$name"
+      rm -rf "$dst/$name"
+    fi
+  done < "$dst/$MANIFEST"
+}
+
 main() {
   local dirs
   dirs="$(detect_skill_dirs)"
@@ -106,6 +121,7 @@ main() {
   while IFS= read -r d; do
     [ -n "$d" ] || continue
     printf 'Updating skills in: %s\n' "$d"
+    remove_orphans "$src" "$d"
     mirror_skills "$src" "$d"
     write_manifest "$src" "$d"
   done <<EOF

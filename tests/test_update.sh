@@ -36,6 +36,37 @@ t_basic_update() {
   rm -rf "$home" "$src"
 }
 
+# 用例3: 旧 manifest 有 A,B → 新源只有 A。B 是孤儿应删,A 保留,manifest 只剩 A。
+t_remove_orphan() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-a"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-b"
+  printf 'skill-a\nskill-b\n' > "$home/$V_AGENT_CN/skills/$MANIFEST"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "删孤儿退出码为 0"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-a" "保留仍在上游的 skill-a"
+  assert_dir_absent "$home/$V_AGENT_CN/skills/skill-b" "删除上游已移除的孤儿 skill-b"
+  assert_file_absent "$home/$V_AGENT_CN/skills/skill-b/SKILL.md" "孤儿 skill-b 内容一并清除"
+  rm -rf "$home" "$src"
+}
+
+# 用例4: 用户自有 skill(未记入 manifest)不得被删。
+t_keep_user_skill() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills/skill-a"
+  mkdir -p "$home/$V_AGENT_CN/skills/my-own"     # 用户自有,未入 manifest
+  printf 'skill-a\n' > "$home/$V_AGENT_CN/skills/$MANIFEST"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "保留用户 skill 场景退出码为 0"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/my-own" "用户自有 skill 保留"
+  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-a" "upstream skill-a 保留"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
 t_basic_update
+t_remove_orphan
+t_keep_user_skill
 finish_tests
