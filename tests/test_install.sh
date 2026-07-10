@@ -55,15 +55,21 @@ t_writes_user_rule() {
   rm -rf "$home" "$src"
 }
 
-# 用例10: 重复安装两次,user_rules 下带标记的规则文件仍只有一个(幂等,覆盖而非新增)。
+# 用例10: 已存在托管规则时,安装应覆盖它而非新建,带标记文件恒为一个(时序无关的确定性验证)。
 t_user_rule_idempotent() {
   local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN"
+  mkdir -p "$home/$V_AGENT_CN/user_rules"
+  # 预置一个带标记的托管规则(自定义文件名,区别于新建命名),模拟"已安装过"
+  printf '<!-- trae-superpowers-managed-rule -->\nold body\n' > "$home/$V_AGENT_CN/user_rules/rule-existing.md"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
   HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  # 安装后带标记文件仍只有一个(覆盖预置文件,而非另建 rule-<ts>000.md)
   local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
-  assert_exit_code 1 "$n" "重复安装后带标记规则文件恰为 1 个"
+  assert_exit_code 1 "$n" "已存在托管规则时安装覆盖而非新增(带标记文件恰为 1)"
+  # 覆盖的正是预置文件(文件名保持 rule-existing.md)
+  assert_file_exists "$home/$V_AGENT_CN/user_rules/rule-existing.md" "覆盖同一文件(预置文件名保留)"
+  # 内容已刷新为完整规则
+  assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-existing.md" "**Superpowers Skills System**" "预置文件内容被刷新为完整规则"
   rm -rf "$home" "$src"
 }
 
@@ -75,6 +81,9 @@ t_user_rule_preserves_user_files() {
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
   HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
   assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-mine.md" "my own rule" "用户自有规则内容保留"
+  # 正向锚点:托管规则确实被写入(证明 write_rule 真的运行过,"安全"结论才成立)
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
+  assert_file_exists "$marked" "托管规则已写入(安全结论有正向锚点)"
   rm -rf "$home" "$src"
 }
 
