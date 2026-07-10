@@ -68,8 +68,9 @@ assert_file_absent() {
 }
 
 # assert_file_contains: 断言文件按整行包含某字符串。参数: $1=路径 $2=期望整行内容 $3=用例描述
+# 用 grep -qxF:-x 整行匹配、-F 视参数为字面量(避免 ** 等被当正则解析报错)。
 assert_file_contains() {
-  if [ -f "$1" ] && grep -qx "$2" "$1"; then
+  if [ -f "$1" ] && grep -qxF "$2" "$1"; then
     TESTS_PASSED=$((TESTS_PASSED + 1))
     printf 'PASS: %s\n' "$3"
   else
@@ -80,7 +81,7 @@ assert_file_contains() {
 
 # assert_file_absent_line: 断言文件不含某整行(或文件不存在)。参数: $1=路径 $2=不期望整行 $3=用例描述
 assert_file_absent_line() {
-  if [ ! -f "$1" ] || ! grep -qx "$2" "$1"; then
+  if [ ! -f "$1" ] || ! grep -qxF "$2" "$1"; then
     TESTS_PASSED=$((TESTS_PASSED + 1))
     printf 'PASS: %s\n' "$3"
   else

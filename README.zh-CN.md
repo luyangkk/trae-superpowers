@@ -26,11 +26,9 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/inst
 
 ## 配置 User Rules
 
-这一步对**两种安装方式都必需**。User Rules 替代 upstream 原生的 SessionStart
-Hook,要求 agent 在任何任务前先检查是否有匹配的技能。
-
-打开 Trae 设置(`Cmd + ,` / `Ctrl + ,`)→ **Rules & Skills > Rules**,编辑
-**User Rules**,粘贴以下内容并保存:
+`install.sh` 与 `update.sh` 现在会把该规则自动写入各 Trae 变体的 `user_rules/`
+目录。**重启 Trae 后,打开 设置 > Rules 确认规则已出现。** 规则文件已写入磁盘;
+若 Trae 仍未显示(部分版本需手动确认一次),可用下方文本手动粘贴作为回退:
 
 ```
 **Superpowers Skills System**
@@ -103,7 +101,7 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/unin
 ```
 
 仅移除 upstream Superpowers 提供的技能,不会动你自己的技能。存在 manifest 时按清单
-精确卸载(无需联网);否则回退到上游清单。User Rules 需在 Trae 设置中手动移除。
+精确卸载(无需联网);否则回退到上游清单。同时移除本工程写入的 User Rules 规则(按隐藏标记匹配);你自己添加的规则不受影响。
 
 ## 工作原理
 

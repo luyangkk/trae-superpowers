@@ -40,6 +40,53 @@ t_variant_case() {
   rm -rf "$home" "$src"
 }
 
+# 用例9: 命中变体时,规则被写入该变体的 user_rules 目录,且内容带标记与关键段落。
+t_writes_user_rule() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "写规则场景退出码为 0"
+  # user_rules 目录下应恰好有一个带标记的规则文件
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
+  assert_file_exists "$marked" "user_rules 下存在带标记的规则文件"
+  assert_file_contains "$marked" "**Superpowers Skills System**" "规则含 Superpowers 触发段"
+  assert_file_contains "$marked" "**Platform Adaptation (Trae)**" "规则含 Trae 适配段"
+  rm -rf "$home" "$src"
+}
+
+# 用例10: 已存在托管规则时,安装应覆盖它而非新建,带标记文件恒为一个(时序无关的确定性验证)。
+t_user_rule_idempotent() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/user_rules"
+  # 预置一个带标记的托管规则(自定义文件名,区别于新建命名),模拟"已安装过"
+  printf '<!-- trae-superpowers-managed-rule -->\nold body\n' > "$home/$V_AGENT_CN/user_rules/rule-existing.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  # 安装后带标记文件仍只有一个(覆盖预置文件,而非另建 rule-<ts>000.md)
+  local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
+  assert_exit_code 1 "$n" "已存在托管规则时安装覆盖而非新增(带标记文件恰为 1)"
+  # 覆盖的正是预置文件(文件名保持 rule-existing.md)
+  assert_file_exists "$home/$V_AGENT_CN/user_rules/rule-existing.md" "覆盖同一文件(预置文件名保留)"
+  # 内容已刷新为完整规则
+  assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-existing.md" "**Superpowers Skills System**" "预置文件内容被刷新为完整规则"
+  rm -rf "$home" "$src"
+}
+
+# 用例11: 预置用户自有规则(不含标记),安装后其内容原样保留。
+t_user_rule_preserves_user_files() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/user_rules"
+  printf 'my own rule\n' > "$home/$V_AGENT_CN/user_rules/rule-mine.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-mine.md" "my own rule" "用户自有规则内容保留"
+  # 正向锚点:托管规则确实被写入(证明 write_rule 真的运行过,"安全"结论才成立)
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
+  assert_file_exists "$marked" "托管规则已写入(安全结论有正向锚点)"
+  rm -rf "$home" "$src"
+}
+
 # 用例7: 重复安装(目标 skill 已存在)→ 合并覆盖,不产生嵌套目录、顶层内容刷新为新版。
 # 回归防护:逐 skill 的 cp -R "$src/$name" "$dst/$name" 在 dst 已存在时会嵌套并残留旧内容。
 t_reinstall_no_nesting() {
@@ -82,6 +129,20 @@ t_dedup_symlink() {
   rm -rf "$home" "$src"
 }
 
+# 用例12: 已存在多个带标记文件(异常残留)时,安装收敛为唯一带标记文件。
+# 正向覆盖 write_rule 里"多命中时删除多余标记文件"的 rm -f 分支。
+t_user_rule_converges_multiple() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/user_rules"
+  printf '<!-- trae-superpowers-managed-rule -->\nold a\n' > "$home/$V_AGENT_CN/user_rules/rule-a.md"
+  printf '<!-- trae-superpowers-managed-rule -->\nold b\n' > "$home/$V_AGENT_CN/user_rules/rule-b.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
+  assert_exit_code 1 "$n" "多个带标记文件时安装收敛为唯一"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
 t_variant_case "$V_AGENT_CN" "agent-cn"
 t_variant_case "$V_AGENT" "agent"
@@ -90,4 +151,8 @@ t_variant_case "$V_TRAE" "trae"
 t_reinstall_no_nesting
 t_copy_failure_skips_manifest
 t_dedup_symlink
+t_writes_user_rule
+t_user_rule_idempotent
+t_user_rule_preserves_user_files
+t_user_rule_converges_multiple
 finish_tests

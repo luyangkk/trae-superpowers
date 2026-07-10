@@ -99,10 +99,24 @@ t_missing_manifest_degrade() {
   rm -rf "$home" "$src"
 }
 
+# 用例: update 会把 user_rules 刷新为带标记的最新规则(即使此前无规则文件)。
+t_update_writes_user_rule() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_AGENT_CN/skills"          # 已安装状态
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "update 写规则退出码为 0"
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
+  assert_file_exists "$marked" "update 后 user_rules 存在带标记规则"
+  assert_file_contains "$marked" "**Platform Adaptation (Trae)**" "update 规则含 Trae 适配段"
+  rm -rf "$home" "$src"
+}
+
 t_no_variant
 t_basic_update
 t_remove_orphan
 t_keep_user_skill
 t_intra_skill_mirror
 t_missing_manifest_degrade
+t_update_writes_user_rule
 finish_tests

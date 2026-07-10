@@ -10,6 +10,9 @@ UPSTREAM_URL="${SUPERPOWERS_UPSTREAM_URL:-https://github.com/obra/superpowers.gi
 # manifest 文件名:本工程装入 skill 的清单;优先据此精确卸载。
 MANIFEST=".superpowers-manifest"
 
+# MARKER: 本工程写入 User Rules 的标记;卸载据此精确删除,不触碰用户自有规则。
+MARKER="<!-- trae-superpowers-managed-rule -->"
+
 # log: 统一日志输出。参数: $1=级别(INFO/WARN/ERROR) $2..=消息。
 # ERROR 走 stderr,其余走 stdout,便于 grep 过滤与错误重定向;不带时间戳保持简洁。
 log() {
@@ -45,6 +48,28 @@ detect_skill_dirs() {
         *) seen="$seen $real"; printf '%s\n' "$c" ;;
       esac
     fi
+  done <<EOF
+$(variant_roots)
+EOF
+}
+
+# detect_user_rules_dirs: 探测已安装 Trae 变体的 user_rules 目录,逐行输出(已去重真实路径)。
+# 命中条件:变体根目录存在(user_rules 子目录可能尚未创建,由 write_rule 负责 mkdir -p)。
+detect_user_rules_dirs() {
+  local seen="" root c real
+  while IFS= read -r root; do
+    [ -n "$root" ] || continue
+    [ -d "$HOME/$root" ] || continue
+    c="$HOME/$root/user_rules"
+    if [ -d "$c" ]; then
+      real="$(cd "$c" 2>/dev/null && pwd -P)"
+    else
+      real="$c"
+    fi
+    case " $seen " in
+      *" $real "*) : ;;                 # 已去重,跳过软链接别名
+      *) seen="$seen $real"; printf '%s\n' "$c" ;;
+    esac
   done <<EOF
 $(variant_roots)
 EOF
@@ -89,6 +114,34 @@ remove_by_manifest() {
   return 0
 }
 
+# remove_managed_rule: 删除目标 user_rules 目录内所有带 MARKER 的规则文件。
+# 只碰带标记文件,保留用户自有规则(含 user_rules.md 与其他 rule-*.md)。
+# 参数: $1=目标 user_rules 目录
+remove_managed_rule() {
+  local dir="$1" f count=0
+  [ -d "$dir" ] || return 0
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] || continue
+    if grep -qF "$MARKER" "$f"; then
+      log INFO "  - $f"
+      rm -f "$f"
+      count=$((count + 1))
+    fi
+  done
+  log INFO "Removed $count managed rule file(s) from: $dir"
+}
+
+# remove_all_managed_rules: 遍历各变体 user_rules 目录,删除本工程写入的带标记规则。
+remove_all_managed_rules() {
+  local rdir
+  while IFS= read -r rdir; do
+    [ -n "$rdir" ] || continue
+    remove_managed_rule "$rdir"
+  done <<EOF
+$(detect_user_rules_dirs)
+EOF
+}
+
 main() {
   local dirs
   dirs="$(detect_skill_dirs)"
@@ -118,7 +171,8 @@ EOF
 
   # 若所有目标都已按 manifest 处理完,无需获取上游清单。
   if [ -z "$(printf '%s' "$fallback_dirs" | tr -d '[:space:]')" ]; then
-    log INFO "Done. Note: remove the Superpowers User Rules manually in Trae settings."
+    remove_all_managed_rules
+    log INFO "Done. Removed Superpowers skills and the User Rule this project wrote."
     return 0
   fi
 
@@ -157,7 +211,8 @@ EOF
     rm -rf "$(dirname "$src")"
   fi
 
-  log INFO "Done. Note: remove the Superpowers User Rules manually in Trae settings."
+  remove_all_managed_rules
+  log INFO "Done. Removed Superpowers skills and the User Rule this project wrote."
   return 0
 }
 
