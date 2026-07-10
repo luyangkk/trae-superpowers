@@ -79,7 +79,7 @@ mirror_skills() {
   for entry in "$src"/*/; do
     [ -d "$entry" ] || continue
     name="$(basename "$entry")"
-    rm -rf "$dst/$name"
+    rm -rf "${dst:?}/${name:?}"
     cp -R "$src/$name" "$dst/$name"
     log INFO "  ~ $name"
     count=$((count + 1))

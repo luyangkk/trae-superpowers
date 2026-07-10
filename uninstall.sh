@@ -80,7 +80,7 @@ remove_by_manifest() {
     [ -n "$name" ] || continue
     if [ -d "$dst/$name" ]; then
       log INFO "  - $name"
-      rm -rf "$dst/$name"
+      rm -rf "${dst:?}/${name:?}"
       count=$((count + 1))
     fi
   done < "$dst/$MANIFEST"
