@@ -13,21 +13,43 @@
 
 | # | 决策点 | 结论 |
 |---|--------|------|
-| 1 | 支持的 Trae 变体 | 同时支持国内版 `~/.trae-cn` 与国际版 `~/.trae` |
+| 1 | 支持的 Trae 变体 | 同时支持国内版与国际版 |
 | 2 | 双语范围 | 仅项目文档双语(README);脚本输出与 skills 内容保持英文原样 |
 | 3 | 安装分发方式 | 主推 `curl -fsSL <raw>/install.sh \| bash` 一行流 |
 | 4 | skills 写入方式 | `cp -r` 直接写入(跟随软链接落到真实目标,与 upstream 官方一致) |
 | 5 | User Rules | 手动配置(脚本不写入用户配置目录),文档提供完整可粘贴文本 |
 | 6 | 原方案 Step 3(改 description) | 删除。与 User Rules 功能重叠;sed 改 YAML frontmatter 脆弱;当前 upstream description 已是扩展版 |
 | 7 | 卸载 | 提供配套 `uninstall.sh` |
+| 8 | 操作系统 | 支持 macOS、Windows、Linux |
+| 9 | 路径策略 | 多候选探测:每个变体探测一组候选目录,存在即装 |
 
-## 3. 环境事实(安装前已在本机验证)
+## 3. 环境事实(官方文档 + 本机验证)
 
-- 国内版 skills 路径 `~/.trae-cn/skills` 是**软链接**,指向 `~/.agents/skills`(受 `.skill-lock.json` 管理)。
-- 国际版路径为 `~/.trae/skills`(普通目录)。
-- 两处路径不同,脚本需分别探测。
+### 官方文档路径(权威)
+
+据 Trae 官方文档(docs.trae.ai / 火山引擎文档),全局技能目录为:
+
+- 国内版(CN):`~/.trae-cn/skills`(macOS/Linux);`%userprofile%\.trae-cn\skills`(Windows)
+- 国际版(intl):`~/.trae/skills`(macOS/Linux);`%userprofile%\.trae\skills`(Windows)
+- **macOS 与 Linux 路径完全相同**,因此 Linux 无需任何平台专属逻辑。
+
+来源:
+- Trae Skills 官方文档:https://docs.trae.ai/solo/skills
+- 火山引擎技能文档:https://www.volcengine.com/docs/86677/2172396
+- 社区一键装 skills 工具 sdd-env-cn(路径对照):https://www.npmjs.com/package/sdd-env-cn
+
+### 本机验证发现的别名
+
+本机存在多套目录互为**软链接别名**,均指向同一真实目标:
+`~/.trae-cn/skills` → `~/.agents/skills`,且与 `~/.trae-cn/skills` 指向一致(受 `.skill-lock.json` 管理)。
+
+结论:官方命名为 `._agent-cn` / `._agent`;`.trae-cn` / `.trae` 是部分环境的别名。
+脚本采用**多候选探测**同时覆盖两套命名,保证跨环境可用。
+
+### 其它事实
+
 - 通过 `cp` 写入 skills 目录是 upstream 官方安装方式,可行且稳妥。
-- User Rules 实际存储为 `~/.trae-cn/user_rules/*.md` 多个独立文件,不是单一文件——因此脚本不自动写入,交由用户在设置界面操作。
+- User Rules 实际存储为用户配置目录下的多个独立 `*.md` 文件,不是单一文件——因此脚本不自动写入,交由用户在设置界面操作。
 
 ## 4. 项目结构
 
@@ -51,28 +73,32 @@ curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/insta
 ## 5. install.sh 核心逻辑
 
 ```
-1. 探测已安装的 Trae 变体 —— 检查 ~/.trae-cn 与 ~/.trae 是否存在
-2. 对每个存在的变体,解析其 skills 目录(跟随软链接到真实目标)
-3. git clone --depth 1 upstream superpowers → 临时目录
-4. cp -r <tmp>/skills/* → 各变体的 skills 目录
-5. 清理临时目录
-6. 打印后续步骤(User Rules 手动配置指引 + 重启提示)
+1. 探测已安装的 Trae 变体 —— 对每个变体探测一组候选 skills 目录:
+     CN 候选:   ~/.trae-cn/skills, ~/.trae-cn/skills
+     intl 候选: ~/.trae/skills,    ~/.trae/skills
+   候选中首个存在的父目录即视为该变体已安装。
+2. 对命中的目标目录,解析真实路径(跟随软链接)。
+3. git clone --depth 1 upstream superpowers → 临时目录。
+4. cp -r <tmp>/skills/* → 各命中变体的 skills 目录。
+5. 清理临时目录。
+6. 打印后续步骤(User Rules 手动配置指引 + 重启提示)。
 ```
 
 关键防护:
 
-- 两个变体都不存在 → 报错并退出(提示未检测到 Trae 安装)。
+- 所有候选目录都不存在 → 报错并退出(提示未检测到 Trae 安装)。
 - `git clone` 失败 → 清理临时目录并退出。
 - `cp` 写入前打印将写入哪些目标目录。
 - 临时目录使用 `mktemp -d`,`trap` 确保异常时也清理。
+- 同一变体多个候选同时命中(互为软链接)时只写一次,避免重复。
 
 ## 6. uninstall.sh 核心逻辑
 
 ```
-1. 探测已安装的 Trae 变体
-2. 重新获取 upstream skills 清单(或按已知清单)确定哪些是本工程装入的
-3. 从各变体 skills 目录移除对应 skills
-4. 打印提示:User Rules 需用户在设置界面手动移除
+1. 用与 install 相同的多候选探测,找出已安装的变体目标目录。
+2. 重新获取 upstream skills 清单(或按已知清单)确定哪些是本工程装入的。
+3. 从各变体 skills 目录移除对应 skills。
+4. 打印提示:User Rules 需用户在设置界面手动移除。
 ```
 
 安全约束:仅移除 upstream superpowers 提供的 skills,不触碰用户其它 skills;删除前打印将删除的清单。
@@ -81,8 +107,8 @@ curl -fsSL https://raw.githubusercontent.com/<owner>/trae-superpowers/main/insta
 
 1. 项目简介 —— 说明「让 Trae 支持 superpowers」是什么、解决什么。
 2. 一键安装 —— curl 命令。
-3. 手动安装(进阶)—— 分步骤,修正为双版本路径 + 软链接说明:
-   - Step 1:克隆 upstream 并复制 skills(区分 `.trae-cn` / `.trae`)。
+3. 手动安装(进阶)—— 分步骤,使用官方路径 + 别名说明:
+   - Step 1:克隆 upstream 并复制 skills(区分 CN `._agent-cn` / intl `._agent`,并说明 `.trae-cn` 别名)。
    - Step 2:配置 User Rules(附完整可粘贴文本)。
    - Step 3:验证安装。
 4. 配置 User Rules —— 完整文本块。
@@ -110,15 +136,14 @@ If you think there is even a 1% chance a skill might apply, you ABSOLUTELY MUST 
 
 ## 9. 支持的操作系统
 
-Trae IDE 仅发行 macOS 与 Windows,故:
+Trae IDE 发行 macOS、Windows 与 Linux(.deb / .rpm),故:
 
 - **macOS**:原生运行 `install.sh` / `uninstall.sh`(bash/zsh)。
+- **Linux**:原生运行同一套脚本;全局技能路径与 macOS 完全相同(`~/.trae-cn/skills` 等)。
 - **Windows**:在 **Git Bash 或 WSL** 中运行同一套 `install.sh` / `uninstall.sh`。
-  bash 环境下 `$HOME/.trae-cn`、`$HOME/.trae` 路径可正常解析,无需第二套脚本。
-- **Linux**:非目标(Trae 无 Linux 发行版)。
+  bash 环境下 `$HOME` 路径可正常解析,无需第二套脚本。
 
-单一 bash 脚本覆盖两个系统,不额外维护 PowerShell 脚本。README 双语均在开头标注
-「Windows 用户请在 Git Bash 或 WSL 中运行」。
+单一 bash 脚本覆盖三个系统。README 双语均在开头标注「Windows 用户请在 Git Bash 或 WSL 中运行」。
 
 ## 10. 非目标(YAGNI)
 
@@ -126,4 +151,3 @@ Trae IDE 仅发行 macOS 与 Windows,故:
 - 不自动写入 User Rules。
 - 不修改 upstream skill 文件(含 description)。
 - 不写 Windows 原生 PowerShell 脚本(Windows 经 Git Bash / WSL 复用 bash 脚本)。
-- 不支持 Linux。
