@@ -3,7 +3,7 @@
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 rc=0
-for t in "$HERE"/test_install.sh "$HERE"/test_uninstall.sh; do
+for t in "$HERE"/test_install.sh "$HERE"/test_update.sh "$HERE"/test_uninstall.sh; do
   printf '\n=== Running %s ===\n' "$(basename "$t")"
   bash "$t" || rc=1
 done
