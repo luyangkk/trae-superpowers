@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 本文件为在此仓库工作的 AI 编码代理提供指引。
 
@@ -23,8 +23,9 @@ bash tests/test_install.sh
 bash tests/test_update.sh
 bash tests/test_uninstall.sh
 
-# 本地离线跑安装/卸载脚本（用假 skills 源，避免真的 git clone 与写入真实目录）
-SUPERPOWERS_SKILLS_SRC=/path/to/fake HOME=/tmp/fakehome bash install.sh
+# 本地离线跑安装脚本（用假 skills 源和显式目标，避免 git clone 与写入真实目录）
+HOME=/tmp/fakehome SUPERPOWERS_TARGET=trae-cn \
+  SUPERPOWERS_SKILLS_SRC=/path/to/fake bash install.sh
 ```
 
 关键环境变量：
@@ -32,6 +33,8 @@ SUPERPOWERS_SKILLS_SRC=/path/to/fake HOME=/tmp/fakehome bash install.sh
 - `SUPERPOWERS_SKILLS_SRC`：注入本地 skills 源（其下需有 `skills/` 子目录），跳过 `git clone`，
   测试与本地验证均依赖它。
 - `SUPERPOWERS_UPSTREAM_URL`：覆盖上游仓库地址，默认 `https://github.com/obra/superpowers.git`。
+- `SUPERPOWERS_TARGET`：非交互环境下指定唯一目标，取值为 `trae-cn` 或 `trae`。
+- `SUPERPOWERS_TTY`：测试专用的终端设备覆盖项，默认 `/dev/tty`；生产使用无需设置。
 
 ## 架构与关键文件
 
@@ -47,8 +50,6 @@ SUPERPOWERS_SKILLS_SRC=/path/to/fake HOME=/tmp/fakehome bash install.sh
   再优先按 manifest 逐名删除（离线可用），无 manifest 时回退到上游 skills 清单。
 - [tests/test_helpers.bash](./tests/test_helpers.bash)：断言与隔离环境辅助（`make_temp_home`、
   `make_fake_src`、`assert_*`、`finish_tests`）。兼容 bash 3.2，不用关联数组。
-- [docs/superpowers/specs/2026-07-10-trae-superpowers-design.md](./docs/superpowers/specs/2026-07-10-trae-superpowers-design.md)：
-  设计文档，记录所有已确认决策与路径依据。改动行为前先读它。
 - [README.md](./README.md) / [README.zh-CN.md](./README.zh-CN.md)：英文默认 + 中文，结构须保持一致。
 
 ### 支持的 Trae 变体目录
@@ -74,15 +75,17 @@ SUPERPOWERS_SKILLS_SRC=/path/to/fake HOME=/tmp/fakehome bash install.sh
 - **代码注释用中文**（跟随现有脚本风格），面向用户的脚本输出与文档（除中文 README 外）用英文。
 - **删除前先打印清单**：`install.sh` 写入前打印目标目录，`uninstall.sh` 删除前打印将删的 skill。
 - **manifest 追踪**：每个 skills 目录根下 `.superpowers-manifest`（纯文本，每行一个 skill 名）
-  记录本工程装入的 skill。install/update 写入，uninstall 优先据此删除；孤儿删除严格限定
-  manifest 范围，不触碰用户自有 skill。`.agents/skills` 永不写 manifest。
-- **自动写入 User Rules**：install/update 把完整版 Superpowers 规则写入各变体
+  记录本工程装入的 skill。install/update 写入，uninstall 优先据此删除；读取时只接受不含
+  路径分隔符的普通目录名，孤儿删除严格限定在 skills 根目录内。`.agents/skills` 永不写 manifest。
+- **自动写入 User Rules**：install/update 把完整版 Superpowers 规则写入选中或自动定位的变体
   `user_rules/rule-*.md`，以标记 `<!-- trae-superpowers-managed-rule -->` 识别，
   幂等覆盖；uninstall 按标记对称删除。只碰带标记文件，不触碰用户自有规则。
   `RULE_BODY` 以 install.sh 为准，update.sh 逐字一致。生效不承诺免重启（需 UI 验收）。
 - **非交互选择**：无 TTY 时必须设置 `SUPERPOWERS_TARGET=trae-cn|trae`；禁止静默默认。
-- **外部目录护栏**：若所选 `.trae*/skills` 的真实路径指向 `.agents/skills`，任何普通模式的
-  安装、更新或卸载都必须拒绝，确保 `.agents` 永不被间接修改。
+- **外部目录护栏**：若 skills 或 user_rules 路径的最近存在父目录解析到 `.agents` 树内，
+  普通模式的安装、更新或卸载必须拒绝；复用模式跳过这类别名，确保 `.agents` 永不被间接修改。
+- **安全写入**：manifest 与托管 Rule 先写入同目录临时文件，再替换目标；不得跟随叶子软链接。
+  临时文件写入、软链接移除或替换失败时，install/update 返回退出码 `4`。
 
 ## 非目标（YAGNI）
 
