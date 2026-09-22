@@ -3,8 +3,8 @@
 # 精确镜像:覆盖同名内容 + 删除上游已移除的孤儿 skill(仅限 manifest 记录范围)。
 # 自包含:不 source 外部文件(需兼容 curl|bash)。兼容 bash 3.2。
 #
-# 注意:变体目录名一律用八进制字节转义构造(\056=".", \137="_"),
-# 规避部分环境对连续词元 dot-underscore-agent / dot-trae 的改写。
+# 注意:隐藏目录名一律用八进制字节转义构造(\056="."),
+# 规避部分环境对连续词元 dot-trae 的改写。
 set -u
 
 UPSTREAM_URL="${SUPERPOWERS_UPSTREAM_URL:-https://github.com/obra/superpowers.git}"
@@ -55,56 +55,149 @@ log() {
   esac
 }
 
-# variant_roots: 逐行输出四个受支持的 Trae 变体根目录名。
-variant_roots() {
-  printf '%s\n' "$(printf '\056\137agent-cn')"
-  printf '%s\n' "$(printf '\056\137agent')"
-  printf '%s\n' "$(printf '\056trae-cn')"
-  printf '%s\n' "$(printf '\056trae')"
+# target_root: 把公开目标名转换为 HOME 下的 Trae 根目录名。
+# 参数: $1=trae-cn|trae。非法值返回 1。
+target_root() {
+  case "$1" in
+    trae-cn) printf '\056trae-cn\n' ;;
+    trae)    printf '\056trae\n' ;;
+    *)       return 1 ;;
+  esac
 }
 
-# detect_skill_dirs: 探测已安装变体的 skills 目录(去重真实路径)。同 install.sh。
-detect_skill_dirs() {
-  local seen="" root c real
-  while IFS= read -r root; do
-    [ -n "$root" ] || continue
-    c="$HOME/$root/skills"
-    if [ -d "$c" ] || [ -d "$HOME/$root" ]; then
-      if [ -d "$c" ]; then
-        real="$(cd "$c" 2>/dev/null && pwd -P)"
-      else
-        real="$c"
-      fi
-      case " $seen " in
-        *" $real "*) : ;;
-        *) seen="$seen $real"; printf '%s\n' "$c" ;;
+# select_target: 从环境变量或 /dev/tty 选择唯一 Trae 目标,输出 trae-cn 或 trae。
+# curl|bash 会占用 stdin,因此交互始终直接读写控制终端。
+select_target() {
+  local target="${SUPERPOWERS_TARGET:-}" key rest selected=0 esc
+  if [ -n "$target" ]; then
+    if target_root "$target" >/dev/null; then
+      printf '%s\n' "$target"
+      return 0
+    fi
+    log ERROR "invalid SUPERPOWERS_TARGET: $target (expected trae-cn or trae)"
+    return 2
+  fi
+  if ! ( : </dev/tty ) 2>/dev/null; then
+    log ERROR "no interactive terminal; set SUPERPOWERS_TARGET=trae-cn or trae."
+    return 2
+  fi
+  exec 3<>/dev/tty
+  esc="$(printf '\033')"
+  printf 'Select the Trae installation to manage:\n' >&3
+  printf '  > Trae CN        (~/%s/skills)\n' "$(target_root trae-cn)" >&3
+  printf '    Trae Intl      (~/%s/skills)\n' "$(target_root trae)" >&3
+  printf 'Use Up/Down arrows, then press Enter.' >&3
+  while IFS= read -r -s -n 1 key <&3; do
+    if [ -z "$key" ]; then
+      break
+    fi
+    if [ "$key" = "$esc" ]; then
+      IFS= read -r -s -n 2 rest <&3 || rest=""
+      case "$rest" in
+        "[A") selected=0 ;;
+        "[B") selected=1 ;;
       esac
+      if [ "$selected" -eq 0 ]; then
+        printf '\r\033[2KSelected: Trae CN' >&3
+      else
+        printf '\r\033[2KSelected: Trae Intl' >&3
+      fi
     fi
-  done <<EOF
-$(variant_roots)
-EOF
+  done
+  printf '\n' >&3
+  exec 3>&-
+  if [ "$selected" -eq 0 ]; then
+    printf 'trae-cn\n'
+  else
+    printf 'trae\n'
+  fi
 }
 
-# detect_user_rules_dirs: 探测已安装 Trae 变体的 user_rules 目录,逐行输出(已去重真实路径)。
-# 命中条件:变体根目录存在(user_rules 子目录可能尚未创建,由 write_rule 负责 mkdir -p)。
-detect_user_rules_dirs() {
-  local seen="" root c real
-  while IFS= read -r root; do
-    [ -n "$root" ] || continue
-    [ -d "$HOME/$root" ] || continue
-    c="$HOME/$root/user_rules"
-    if [ -d "$c" ]; then
-      real="$(cd "$c" 2>/dev/null && pwd -P)"
-    else
-      real="$c"
+# target_skills_dir: 输出指定 Trae 目标的全局 skills 目录。
+# 参数: $1=trae-cn|trae。
+target_skills_dir() {
+  local root
+  root="$(target_root "$1")" || return 1
+  printf '%s/%s/skills\n' "$HOME" "$root"
+}
+
+# target_rules_dir: 输出指定 Trae 目标的 User Rules 目录。
+# 参数: $1=trae-cn|trae。
+target_rules_dir() {
+  local root
+  root="$(target_root "$1")" || return 1
+  printf '%s/%s/user_rules\n' "$HOME" "$root"
+}
+
+# agents_skills_dir: 输出外部共享 skills 目录路径;本工程只检测和复用,不写入。
+agents_skills_dir() {
+  printf '%s/%s/skills\n' "$HOME" "$(printf '\056agents')"
+}
+
+# agents_superpowers_state: 检查 .agents 中四个核心 Superpowers Skill。
+# 返回 0=完整可复用,1=完全未安装,2=残缺安装。
+agents_superpowers_state() {
+  local dir count=0 name
+  dir="$(agents_skills_dir)"
+  for name in using-superpowers brainstorming test-driven-development systematic-debugging; do
+    [ -f "$dir/$name/SKILL.md" ] && count=$((count + 1))
+  done
+  [ "$count" -eq 4 ] && return 0
+  [ "$count" -eq 0 ] && return 1
+  return 2
+}
+
+# is_agents_skills_dir: 判断候选目录是否与外部 .agents/skills 指向同一真实路径。
+# 两个目录都存在时才比较,用于防止通过 Trae 软链接间接修改外部安装。
+is_agents_skills_dir() {
+  local candidate="$1" agents candidate_real agents_real
+  agents="$(agents_skills_dir)"
+  [ -d "$candidate" ] && [ -d "$agents" ] || return 1
+  candidate_real="$(cd "$candidate" 2>/dev/null && pwd -P)" || return 1
+  agents_real="$(cd "$agents" 2>/dev/null && pwd -P)" || return 1
+  [ "$candidate_real" = "$agents_real" ]
+}
+
+# unique_manifest_target: 恰有一个 Trae 目标带 manifest 时输出其目标名。
+# 两边都有或都没有时返回 1,交由 select_target 决定。
+unique_manifest_target() {
+  local target dir found="" count=0
+  for target in trae-cn trae; do
+    dir="$(target_skills_dir "$target")"
+    if [ -f "$dir/$MANIFEST" ]; then
+      found="$target"
+      count=$((count + 1))
     fi
-    case " $seen " in
-      *" $real "*) : ;;                 # 已去重,跳过软链接别名
-      *) seen="$seen $real"; printf '%s\n' "$c" ;;
-    esac
-  done <<EOF
-$(variant_roots)
-EOF
+  done
+  [ "$count" -eq 1 ] || return 1
+  printf '%s\n' "$found"
+}
+
+# has_managed_rule: 判断目标 User Rules 目录是否存在本工程托管规则。
+# 参数: $1=user_rules 目录。
+has_managed_rule() {
+  local dir="$1" f
+  [ -d "$dir" ] || return 1
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] || continue
+    grep -qF "$MARKER" "$f" && return 0
+  done
+  return 1
+}
+
+# unique_rule_target: 恰有一个 Trae 目标带托管 Rule 时输出其目标名。
+# 用于完整 .agents 复用模式,避免依赖可能已不存在的 manifest。
+unique_rule_target() {
+  local target dir found="" count=0
+  for target in trae-cn trae; do
+    dir="$(target_rules_dir "$target")"
+    if has_managed_rule "$dir"; then
+      found="$target"
+      count=$((count + 1))
+    fi
+  done
+  [ "$count" -eq 1 ] || return 1
+  printf '%s\n' "$found"
 }
 
 # resolve_src: 返回上游 skills 源目录(内含各 skill 子目录)。
@@ -163,6 +256,24 @@ write_manifest() {
   log INFO "Wrote manifest: $dst/$MANIFEST"
 }
 
+# remove_managed_skills: 按 manifest 清理本项目装入的 Trae 副本,不猜测未记录目录的归属。
+# 参数: $1=目标 skills 目录。无 manifest 时不做任何处理。
+remove_managed_skills() {
+  local dst="$1" name count=0
+  [ -f "$dst/$MANIFEST" ] || return 0
+  log INFO "Removing managed duplicate skills from: $dst"
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    if [ -d "$dst/$name" ]; then
+      log INFO "  - $name"
+      rm -rf "${dst:?}/${name:?}"
+      count=$((count + 1))
+    fi
+  done < "$dst/$MANIFEST"
+  rm -f "$dst/$MANIFEST"
+  log INFO "Removed $count managed duplicate skill(s) and manifest from: $dst"
+}
+
 # write_rule: 幂等地把 Superpowers User Rules 写入目标 user_rules 目录。
 # 扫描带 MARKER 的 *.md:命中则覆盖第一个(多命中时删除多余的,收敛为唯一);
 # 未命中则新建 rule-<epoch>000.md(仿 Trae 原生 rule-<ms> 命名)。
@@ -211,14 +322,45 @@ remove_orphans() {
 }
 
 main() {
-  local dirs
-  dirs="$(detect_skill_dirs)"
-  if [ -z "$dirs" ]; then
-    log ERROR "no Trae installation detected."
-    return 3
+  local agents_state agents_dir target d rdir
+  agents_dir="$(agents_skills_dir)"
+  agents_superpowers_state
+  agents_state=$?
+  if [ "$agents_state" -eq 0 ]; then
+    if target="$(unique_rule_target)"; then
+      log INFO "Located managed target from User Rule: $target"
+    else
+      target="$(select_target)" || return $?
+    fi
+    d="$(target_skills_dir "$target")"
+    rdir="$(target_rules_dir "$target")"
+    log INFO "Using existing Superpowers skills from: $agents_dir"
+    log INFO "The external .agents installation will not be modified."
+    if is_agents_skills_dir "$d"; then
+      log INFO "Skipping managed-copy cleanup through .agents alias: $d"
+    else
+      remove_managed_skills "$d"
+    fi
+    write_rule "$rdir"
+    log INFO "Done. Reusing external Superpowers skills; the Trae User Rule was refreshed."
+    return 0
   fi
-  log INFO "Detected target skill dirs:"
-  printf '%s\n' "$dirs"
+  if [ "$agents_state" -eq 2 ]; then
+    log WARN "Incomplete Superpowers installation found at $agents_dir; leaving it unchanged."
+    log INFO "Updating the complete copy in Trae's skills directory."
+  fi
+  if target="$(unique_manifest_target)"; then
+    log INFO "Located managed target from manifest: $target"
+  else
+    target="$(select_target)" || return $?
+  fi
+  d="$(target_skills_dir "$target")"
+  rdir="$(target_rules_dir "$target")"
+  log INFO "Selected target: $d"
+  if is_agents_skills_dir "$d"; then
+    log ERROR "refusing to update through Trae path that resolves to external .agents/skills: $d"
+    return 5
+  fi
 
   local src
   if ! src="$(resolve_src)"; then
@@ -231,25 +373,13 @@ main() {
     return 4
   fi
 
-  local d
-  while IFS= read -r d; do
-    [ -n "$d" ] || continue
-    log INFO "Updating skills in: $d"
-    remove_orphans "$src" "$d"
-    mirror_skills "$src" "$d"
-    write_manifest "$src" "$d"
-  done <<EOF
-$dirs
-EOF
+  log INFO "Updating skills in: $d"
+  remove_orphans "$src" "$d"
+  mirror_skills "$src" "$d"
+  write_manifest "$src" "$d"
 
   # 自动刷新 User Rules(尽力而为:写入后需重启 Trae 验收;失败可 UI 手动回退)。
-  local rdir
-  while IFS= read -r rdir; do
-    [ -n "$rdir" ] || continue
-    write_rule "$rdir"
-  done <<EOF
-$(detect_user_rules_dirs)
-EOF
+  write_rule "$rdir"
 
   if [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ]; then
     log INFO "Cleaning up temporary clone: $(dirname "$src")"

@@ -23,6 +23,16 @@ make_fake_src() {
   done
 }
 
+# make_fake_agents_superpowers: 在隔离 HOME 的 .agents/skills 下构造 Superpowers skills。
+# 仅传 HOME 时创建四个核心 skill;额外参数存在时只创建参数指定的 skill,用于残缺安装测试。
+make_fake_agents_superpowers() {
+  local home="$1"; shift
+  if [ "$#" -eq 0 ]; then
+    set -- using-superpowers brainstorming test-driven-development systematic-debugging
+  fi
+  make_fake_src "$home/.agents" "$@"
+}
+
 # assert_dir_exists: 断言目录存在。参数: $1=路径 $2=用例描述
 assert_dir_exists() {
   if [ -d "$1" ]; then

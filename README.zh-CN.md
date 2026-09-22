@@ -19,14 +19,35 @@
 curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/install.sh | bash
 ```
 
-脚本会自动探测你的 Trae 版本(国内版 / 国际版),把全部 upstream skills 复制到正确的
-全局技能目录。支持 macOS、Linux 和 Windows(Git Bash / WSL)。
+脚本会让你从以下两个 Trae 全局技能目录中选择一个:
 
-完成后请[配置 User Rules](#配置-user-rules)并重启 Trae。
+- 国内版:`~/.trae-cn/skills`
+- 国际版:`~/.trae/skills`
+
+使用方向键和 Enter 选择目标,所选目录不存在时会自动创建。CI 等非交互环境须设置
+`SUPERPOWERS_TARGET=trae-cn` 或 `SUPERPOWERS_TARGET=trae`;没有 TTY 且未指定目标时,
+脚本会报错,不会擅自选择默认目录。
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/install.sh \
+  | SUPERPOWERS_TARGET=trae-cn bash
+```
+
+复制前,脚本会检查 `~/.agents/skills`。如果其中
+同时存在 `using-superpowers`、`brainstorming`、`test-driven-development` 和
+`systematic-debugging` 四个核心 Skill,脚本会直接复用这套外部安装,不会更新、
+写入 manifest 或卸载 `.agents` 中的任何内容。此时仍需选择一个 Trae 版本来写入
+User Rule,但不会向该目录复制 Skill。
+
+如果 `.agents` 只有部分核心 Skill,脚本会保留原内容,并把完整副本安装到所选 Trae 目录。
+旧的 `~/._agent-cn` 与 `~/._agent` 已不再探测,也不会自动迁移。脚本支持 macOS、
+Linux 和 Windows(Git Bash / WSL)。
+
+完成后请重启 Trae,并[确认 User Rules](#配置-user-rules)已出现。
 
 ## 配置 User Rules
 
-`install.sh` 与 `update.sh` 现在会把该规则自动写入各 Trae 变体的 `user_rules/`
+`install.sh` 与 `update.sh` 会把该规则自动写入所选 Trae 变体的 `user_rules/`
 目录。**重启 Trae 后,打开 设置 > Rules 确认规则已出现。** 规则文件已写入磁盘;
 若 Trae 仍未显示(部分版本需手动确认一次),可用下方文本手动粘贴作为回退:
 
@@ -66,15 +87,14 @@ Trae fully supports subagents through these tools — never treat "dispatch a su
 ```bash
 git clone --depth 1 https://github.com/obra/superpowers.git /tmp/superpowers
 
-# 全局技能目录。国内版用 ~/._agent-cn;国际版用 ~/._agent。
-mkdir -p ~/._agent-cn/skills
-cp -R /tmp/superpowers/skills/. ~/._agent-cn/skills/
+# Trae 国内版全局技能目录。
+mkdir -p ~/.trae-cn/skills
+cp -R /tmp/superpowers/skills/. ~/.trae-cn/skills/
 
 rm -rf /tmp/superpowers
 ```
 
-国际版请把 `._agent-cn` 换成 `._agent`。一键脚本还会额外探测 `.trae-cn` / `.trae`,
-以兼容使用这些命名的环境,你无需自己判断。
+国际版请把 `.trae-cn` 换成 `.trae`。
 
 复制完技能后,请[配置 User Rules](#配置-user-rules)。
 
@@ -90,9 +110,11 @@ rm -rf /tmp/superpowers
 curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/update.sh | bash
 ```
 
-把已安装的 skills 精确镜像到上游最新状态:更新变动内容,并移除上游已删除的
-skill。绝不触碰你自己安装的 skill —— 只有本工程 manifest 记录过的 skill 才会
-被同步。
+把一个由本工程管理的 `.trae*/skills` 副本精确镜像到上游最新状态:更新变动内容,
+并移除上游已删除的 skill。只有一处 manifest 时自动定位;两处都有或都没有时要求
+选择目标。脚本不会触碰用户自有 skill。如果 `.agents/skills` 已有完整
+Superpowers,脚本会直接复用且不更新该外部副本;只有一处托管 User Rule 时自动定位,
+否则要求选择目标。
 
 ## 卸载
 
@@ -100,16 +122,23 @@ skill。绝不触碰你自己安装的 skill —— 只有本工程 manifest 记
 curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/uninstall.sh | bash
 ```
 
-仅移除 upstream Superpowers 提供的技能,不会动你自己的技能。存在 manifest 时按清单
-精确卸载(无需联网);否则回退到上游清单。同时移除本工程写入的 User Rules 规则(按隐藏标记匹配);你自己添加的规则不受影响。
+仅移除 upstream Superpowers 提供的技能,不会动你自己的技能。只有一处 manifest 时
+自动定位;两处都有或都没有时要求选择目标。存在 manifest 时按清单精确卸载(无需联网);
+否则在所选目标中回退到上游清单。同时移除本工程写入的 User Rules 规则(按隐藏标记
+匹配),你自己添加的规则不受影响。完整的 `.agents/skills` 外部安装永远不会被删除;
+处于复用模式时无需选择,脚本会清理两种 Trae 目录中由 manifest 管理的重复副本及
+全部托管 User Rule。
 
 ## 工作原理
 
-- **Skills** 被复制到 Trae 全局技能目录,使其在所有项目中加载。
+- **Skills** 被复制到所选的 `.trae-cn/skills` 或 `.trae/skills`,使其在所有项目
+  中加载。完整的 `.agents/skills` 安装优先,脚本只复用它。任何解析到
+  `.agents/skills` 的 Trae 软链接路径都不会被修改。
 - **User Rules** 替代 upstream 的 SessionStart Hook,要求 agent 在任何任务前先检查
   是否有匹配的技能。
-- **Manifest** —— 每个 skills 目录下的 `.superpowers-manifest` 文件记录本工程装入了
-  哪些 skill,使更新与卸载能精确定位它们,不影响你自己的 skill。请勿手动编辑。
+- **Manifest** —— 每个由本工程管理的 Trae skills 目录下,
+  `.superpowers-manifest` 文件记录本工程装入了哪些 skill,使更新与卸载能精确定位
+  它们,不影响你自己的 skill。`.agents/skills` 不会写入该文件。请勿手动编辑。
 
 ## 许可证
 

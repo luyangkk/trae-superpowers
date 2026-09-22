@@ -1,158 +1,246 @@
 #!/usr/bin/env bash
 # install.sh 行为测试。用隔离 HOME + 假 skills 源,离线运行。
-# 变体名一律用八进制字节转义构造,规避环境对 dot-underscore-agent / dot-trae
-# 这类连续词元的改写(本环境实测存在此改写)。
+# 目录名用八进制字节转义构造,规避环境对 dot-trae 等连续词元的改写。
 set -u
 HERE="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=tests/test_helpers.bash
 source "$HERE/test_helpers.bash"
 INSTALL="$HERE/../install.sh"
 
-# 四个变体根目录名(八进制构造):CN/国际 的 agent 与 trae 变体
-V_AGENT_CN="$(printf '\056\137agent-cn')"
-V_AGENT="$(printf '\056\137agent')"
 V_TRAE_CN="$(printf '\056trae-cn')"
 V_TRAE="$(printf '\056trae')"
+MANIFEST=".superpowers-manifest"
 
-# 用例1: HOME 下无任何 Trae 变体目录 → 退出码 3
-t_no_variant() {
+# t_target_case: 显式目标会创建对应 Trae 目录并只安装到该目录。
+# 参数: $1=环境变量值 $2=变体根目录名 $3=用例前缀
+t_target_case() {
+  local target="$1" root="$2" label="$3"
   local home; home="$(make_temp_home)"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers brainstorming
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_exit_code 3 "$?" "无变体时退出码为 3"
-  rm -rf "$home" "$src"
-}
-
-# t_variant_case: 通用用例,验证某个变体根存在时 skills 被复制进去。
-# 参数: $1=变体根目录名  $2=用例前缀
-t_variant_case() {
-  local root="$1" label="$2"
-  local home; home="$(make_temp_home)"
-  mkdir -p "$home/$root"                 # 只建变体根,不建 skills 子目录
-  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers brainstorming
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_exit_code 0 "$?" "$label: 命中时退出码为 0"
+  HOME="$home" SUPERPOWERS_TARGET="$target" SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "$label: 显式目标安装成功"
   assert_dir_exists "$home/$root/skills/using-superpowers" "$label: using-superpowers 被复制"
   assert_dir_exists "$home/$root/skills/brainstorming" "$label: brainstorming 被复制"
-  assert_file_exists "$home/$root/skills/.superpowers-manifest" "$label: manifest 已生成"
-  assert_file_contains "$home/$root/skills/.superpowers-manifest" "using-superpowers" "$label: manifest 含 using-superpowers"
-  assert_file_contains "$home/$root/skills/.superpowers-manifest" "brainstorming" "$label: manifest 含 brainstorming"
+  assert_file_exists "$home/$root/skills/$MANIFEST" "$label: manifest 已生成"
   rm -rf "$home" "$src"
 }
 
-# 用例9: 命中变体时,规则被写入该变体的 user_rules 目录,且内容带标记与关键段落。
+# t_no_target_without_tty: 无 TTY 且未指定目标时必须失败,不能静默选默认值。
+t_no_target_without_tty() {
+  local home; home="$(make_temp_home)"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" </dev/null >/dev/null 2>&1
+  assert_exit_code 2 "$?" "无 TTY 且无目标时退出码为 2"
+  assert_dir_absent "$home/$V_TRAE_CN" "失败时不创建国内版目录"
+  assert_dir_absent "$home/$V_TRAE" "失败时不创建国际版目录"
+  rm -rf "$home" "$src"
+}
+
+# t_invalid_target: 非法 SUPERPOWERS_TARGET 必须失败。
+t_invalid_target() {
+  local home; home="$(make_temp_home)"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=invalid SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 2 "$?" "非法目标退出码为 2"
+  rm -rf "$home" "$src"
+}
+
+# t_only_selected_variant: 两个 Trae 目录都存在时只写入用户选择的目标。
+t_only_selected_variant() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN" "$home/$V_TRAE"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "双变体场景安装成功"
+  assert_dir_absent "$home/$V_TRAE_CN/skills/using-superpowers" "未选择的国内版未写入"
+  assert_dir_exists "$home/$V_TRAE/skills/using-superpowers" "选择的国际版已写入"
+  rm -rf "$home" "$src"
+}
+
+# t_reinstall_other_target_keeps_old: 再次安装到另一目录时不迁移或清理旧目录。
+t_reinstall_other_target_keeps_old() {
+  local home; home="$(make_temp_home)"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  HOME="$home" SUPERPOWERS_TARGET=trae SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "切换目标重复安装成功"
+  assert_file_exists "$home/$V_TRAE_CN/skills/$MANIFEST" "旧目标 manifest 保留"
+  assert_file_exists "$home/$V_TRAE/skills/$MANIFEST" "新目标 manifest 已写入"
+  rm -rf "$home" "$src"
+}
+
+# t_reuses_complete_agents: 完整 .agents 被直接复用,只在所选 Trae 目录写规则。
+t_reuses_complete_agents() {
+  local home; home="$(make_temp_home)"
+  make_fake_agents_superpowers "$home"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "完整 .agents 复用场景退出码为 0"
+  assert_dir_absent "$home/$V_TRAE_CN/skills/using-superpowers" "复用时不向 Trae 复制 skill"
+  assert_file_absent "$home/$V_TRAE_CN/skills/$MANIFEST" "复用时不写 Trae manifest"
+  assert_file_exists "$home/.agents/skills/using-superpowers/SKILL.md" ".agents 内容保持存在"
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_TRAE_CN/user_rules" 2>/dev/null | head -1)"
+  assert_file_exists "$marked" "复用时仍写入 Trae User Rule"
+  assert_dir_absent "$home/$V_TRAE/user_rules" "未选择的变体不写规则"
+  rm -rf "$home"
+}
+
+# t_reuse_cleans_selected_duplicate: 复用 .agents 时只清理所选目录中 manifest 管理的副本。
+t_reuse_cleans_managed_duplicate() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills/using-superpowers"
+  mkdir -p "$home/$V_TRAE_CN/skills/my-own"
+  mkdir -p "$home/$V_TRAE/skills/using-superpowers"
+  printf 'using-superpowers\n' > "$home/$V_TRAE_CN/skills/$MANIFEST"
+  printf 'using-superpowers\n' > "$home/$V_TRAE/skills/$MANIFEST"
+  make_fake_agents_superpowers "$home"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "复用清理旧副本场景退出码为 0"
+  assert_dir_absent "$home/$V_TRAE_CN/skills/using-superpowers" "manifest 管理的重复副本被清理"
+  assert_file_absent "$home/$V_TRAE_CN/skills/$MANIFEST" "旧 manifest 被清理"
+  assert_dir_exists "$home/$V_TRAE_CN/skills/my-own" "未记录的用户 skill 保留"
+  assert_file_exists "$home/$V_TRAE/skills/$MANIFEST" "未选择目录的 manifest 保留"
+  rm -rf "$home"
+}
+
+# t_reuse_preserves_agents_alias: Trae skills 指向 .agents 时不得经由别名清理外部安装。
+t_reuse_preserves_agents_alias() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN"
+  make_fake_agents_superpowers "$home"
+  printf 'using-superpowers\n' > "$home/.agents/skills/$MANIFEST"
+  ln -s "$home/.agents/skills" "$home/$V_TRAE_CN/skills"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "复用 .agents 软链接场景退出码为 0"
+  assert_file_exists "$home/.agents/skills/using-superpowers/SKILL.md" "软链接场景保留外部 skill"
+  assert_file_exists "$home/.agents/skills/$MANIFEST" "软链接场景不删除外部 manifest"
+  rm -rf "$home"
+}
+
+# t_partial_agents_installs_trae: 残缺 .agents 不被接管,完整副本安装到 Trae。
+t_partial_agents_installs_trae() {
+  local home; home="$(make_temp_home)"
+  make_fake_agents_superpowers "$home" using-superpowers brainstorming test-driven-development
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers brainstorming
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "残缺 .agents 场景退出码为 0"
+  assert_file_exists "$home/.agents/skills/using-superpowers/SKILL.md" "残缺 .agents 内容保留"
+  assert_dir_exists "$home/$V_TRAE_CN/skills/brainstorming" "完整副本安装到 Trae"
+  assert_file_exists "$home/$V_TRAE_CN/skills/$MANIFEST" "Trae manifest 已生成"
+  rm -rf "$home" "$src"
+}
+
+# t_refuses_agents_alias_install: Trae skills 指向 .agents 时不得写入外部目录。
+t_refuses_agents_alias_install() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN" "$home/.agents/skills/external"
+  printf 'keep\n' > "$home/.agents/skills/external/data"
+  ln -s "$home/.agents/skills" "$home/$V_TRAE_CN/skills"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 5 "$?" "指向 .agents 的安装目标被拒绝"
+  assert_file_contains "$home/.agents/skills/external/data" "keep" ".agents 原内容保持不变"
+  assert_dir_absent "$home/.agents/skills/using-superpowers" ".agents 未写入新 skill"
+  rm -rf "$home" "$src"
+}
+
+# t_reinstall_no_nesting: 重复安装刷新顶层内容且不产生嵌套目录。
+t_reinstall_no_nesting() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills/using-superpowers"
+  printf 'old\n' > "$home/$V_TRAE_CN/skills/using-superpowers/SKILL.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  printf 'new\n' > "$src/skills/using-superpowers/SKILL.md"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "重复安装退出码为 0"
+  assert_dir_absent "$home/$V_TRAE_CN/skills/using-superpowers/using-superpowers" "重复安装不产生嵌套目录"
+  assert_file_contains "$home/$V_TRAE_CN/skills/using-superpowers/SKILL.md" "new" "重复安装刷新顶层内容"
+  rm -rf "$home" "$src"
+}
+
+# t_copy_failure_skips_manifest: 复制失败的 skill 不写入 manifest,其余 skill 正常。
+t_copy_failure_skips_manifest() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills"
+  printf 'iamfile\n' > "$home/$V_TRAE_CN/skills/skill-b"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a skill-b
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "复制失败场景退出码为 0"
+  assert_dir_exists "$home/$V_TRAE_CN/skills/skill-a" "未受影响的 skill-a 正常安装"
+  assert_file_contains "$home/$V_TRAE_CN/skills/$MANIFEST" "skill-a" "manifest 含成功的 skill-a"
+  assert_file_absent_line "$home/$V_TRAE_CN/skills/$MANIFEST" "skill-b" "manifest 不含失败的 skill-b"
+  rm -rf "$home" "$src"
+}
+
+# t_writes_user_rule: 正常安装会写入带标记的完整 User Rule。
 t_writes_user_rule() {
   local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN"
+  mkdir -p "$home/$V_TRAE_CN"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_exit_code 0 "$?" "写规则场景退出码为 0"
-  # user_rules 目录下应恰好有一个带标记的规则文件
-  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_TRAE_CN/user_rules" 2>/dev/null | head -1)"
   assert_file_exists "$marked" "user_rules 下存在带标记的规则文件"
   assert_file_contains "$marked" "**Superpowers Skills System**" "规则含 Superpowers 触发段"
   assert_file_contains "$marked" "**Platform Adaptation (Trae)**" "规则含 Trae 适配段"
   rm -rf "$home" "$src"
 }
 
-# 用例10: 已存在托管规则时,安装应覆盖它而非新建,带标记文件恒为一个(时序无关的确定性验证)。
+# t_user_rule_idempotent: 已有托管规则时覆盖原文件并收敛为唯一。
 t_user_rule_idempotent() {
   local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN/user_rules"
-  # 预置一个带标记的托管规则(自定义文件名,区别于新建命名),模拟"已安装过"
-  printf '<!-- trae-superpowers-managed-rule -->\nold body\n' > "$home/$V_AGENT_CN/user_rules/rule-existing.md"
+  mkdir -p "$home/$V_TRAE_CN/user_rules"
+  printf '<!-- trae-superpowers-managed-rule -->\nold body\n' > "$home/$V_TRAE_CN/user_rules/rule-existing.md"
+  printf '<!-- trae-superpowers-managed-rule -->\nold duplicate\n' > "$home/$V_TRAE_CN/user_rules/rule-duplicate.md"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  # 安装后带标记文件仍只有一个(覆盖预置文件,而非另建 rule-<ts>000.md)
-  local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
-  assert_exit_code 1 "$n" "已存在托管规则时安装覆盖而非新增(带标记文件恰为 1)"
-  # 覆盖的正是预置文件(文件名保持 rule-existing.md)
-  assert_file_exists "$home/$V_AGENT_CN/user_rules/rule-existing.md" "覆盖同一文件(预置文件名保留)"
-  # 内容已刷新为完整规则
-  assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-existing.md" "**Superpowers Skills System**" "预置文件内容被刷新为完整规则"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  local n marked
+  n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_TRAE_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
+  marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_TRAE_CN/user_rules" 2>/dev/null | head -1)"
+  assert_exit_code 1 "$n" "托管规则收敛为唯一"
+  assert_file_exists "$marked" "收敛后托管规则文件存在"
+  assert_file_contains "$marked" "**Superpowers Skills System**" "托管规则内容已刷新"
   rm -rf "$home" "$src"
 }
 
-# 用例11: 预置用户自有规则(不含标记),安装后其内容原样保留。
+# t_user_rule_preserves_user_files: 安装不修改无托管标记的用户规则。
 t_user_rule_preserves_user_files() {
   local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN/user_rules"
-  printf 'my own rule\n' > "$home/$V_AGENT_CN/user_rules/rule-mine.md"
+  mkdir -p "$home/$V_TRAE_CN/user_rules"
+  printf 'my own rule\n' > "$home/$V_TRAE_CN/user_rules/rule-mine.md"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_file_contains "$home/$V_AGENT_CN/user_rules/rule-mine.md" "my own rule" "用户自有规则内容保留"
-  # 正向锚点:托管规则确实被写入(证明 write_rule 真的运行过,"安全"结论才成立)
-  local marked; marked="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | head -1)"
-  assert_file_exists "$marked" "托管规则已写入(安全结论有正向锚点)"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_file_contains "$home/$V_TRAE_CN/user_rules/rule-mine.md" "my own rule" "用户自有规则内容保留"
   rm -rf "$home" "$src"
 }
 
-# 用例7: 重复安装(目标 skill 已存在)→ 合并覆盖,不产生嵌套目录、顶层内容刷新为新版。
-# 回归防护:逐 skill 的 cp -R "$src/$name" "$dst/$name" 在 dst 已存在时会嵌套并残留旧内容。
-t_reinstall_no_nesting() {
-  local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN/skills/using-superpowers"       # 预置"已装过"的旧内容
-  printf 'old\n' > "$home/$V_AGENT_CN/skills/using-superpowers/SKILL.md"
-  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  printf 'new\n' > "$src/skills/using-superpowers/SKILL.md"   # 新源为不同内容
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_exit_code 0 "$?" "重复安装退出码为 0"
-  assert_dir_absent "$home/$V_AGENT_CN/skills/using-superpowers/using-superpowers" "重复安装不产生嵌套目录"
-  assert_file_contains "$home/$V_AGENT_CN/skills/using-superpowers/SKILL.md" "new" "重复安装顶层内容刷新为新版"
-  rm -rf "$home" "$src"
-}
-
-# 用例8: 某个 skill 复制失败(目标名被普通文件占位)→ 不计入 manifest,其余 skill 正常。
-# 遵循设计 §8:cp 失败打印警告、继续,manifest 不声称未成功装入的 skill。
-t_copy_failure_skips_manifest() {
-  local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN/skills"
-  printf 'iamfile\n' > "$home/$V_AGENT_CN/skills/skill-b"     # 占位文件,令 skill-b 复制失败
-  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a skill-b
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_exit_code 0 "$?" "复制失败场景退出码为 0"
-  assert_dir_exists "$home/$V_AGENT_CN/skills/skill-a" "未受影响的 skill-a 正常安装"
-  assert_file_contains "$home/$V_AGENT_CN/skills/.superpowers-manifest" "skill-a" "manifest 含成功的 skill-a"
-  assert_file_absent_line "$home/$V_AGENT_CN/skills/.superpowers-manifest" "skill-b" "manifest 不含失败的 skill-b"
-  rm -rf "$home" "$src"
-}
-
-# 用例6: 一个变体根是另一个的软链接别名 → pwd -P 去重后只安装一次
-t_dedup_symlink() {
-  local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN/skills"       # 真实变体根
-  ln -s "$home/$V_AGENT_CN" "$home/$V_TRAE_CN"   # 另一变体名软链到它
-  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  assert_exit_code 0 "$?" "软链接别名场景退出码为 0"
-  assert_dir_exists "$home/$V_AGENT_CN/skills/using-superpowers" "别名场景 skill 已安装"
-  rm -rf "$home" "$src"
-}
-
-# 用例12: 已存在多个带标记文件(异常残留)时,安装收敛为唯一带标记文件。
-# 正向覆盖 write_rule 里"多命中时删除多余标记文件"的 rm -f 分支。
-t_user_rule_converges_multiple() {
-  local home; home="$(make_temp_home)"
-  mkdir -p "$home/$V_AGENT_CN/user_rules"
-  printf '<!-- trae-superpowers-managed-rule -->\nold a\n' > "$home/$V_AGENT_CN/user_rules/rule-a.md"
-  printf '<!-- trae-superpowers-managed-rule -->\nold b\n' > "$home/$V_AGENT_CN/user_rules/rule-b.md"
-  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
-  local n; n="$(grep -rl 'trae-superpowers-managed-rule' "$home/$V_AGENT_CN/user_rules" 2>/dev/null | wc -l | tr -d ' ')"
-  assert_exit_code 1 "$n" "多个带标记文件时安装收敛为唯一"
-  rm -rf "$home" "$src"
-}
-
-t_no_variant
-t_variant_case "$V_AGENT_CN" "agent-cn"
-t_variant_case "$V_AGENT" "agent"
-t_variant_case "$V_TRAE_CN" "trae-cn"
-t_variant_case "$V_TRAE" "trae"
+t_target_case trae-cn "$V_TRAE_CN" "trae-cn"
+t_target_case trae "$V_TRAE" "trae"
+t_no_target_without_tty
+t_invalid_target
+t_only_selected_variant
+t_reinstall_other_target_keeps_old
+t_reuses_complete_agents
+t_reuse_cleans_managed_duplicate
+t_reuse_preserves_agents_alias
+t_partial_agents_installs_trae
+t_refuses_agents_alias_install
 t_reinstall_no_nesting
 t_copy_failure_skips_manifest
-t_dedup_symlink
 t_writes_user_rule
 t_user_rule_idempotent
 t_user_rule_preserves_user_files
-t_user_rule_converges_multiple
 finish_tests

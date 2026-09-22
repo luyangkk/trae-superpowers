@@ -20,17 +20,40 @@ English | [简体中文](./README.zh-CN.md)
 curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/install.sh | bash
 ```
 
-The script detects your Trae variant (CN / international) and copies all
-upstream skills into the correct global skills directory. It supports macOS,
-Linux, and Windows (Git Bash / WSL).
+The script asks you to choose one Trae global skills directory:
 
-After it finishes, [configure User Rules](#configure-user-rules) and restart
-Trae.
+- CN: `~/.trae-cn/skills`
+- International: `~/.trae/skills`
+
+Use the arrow keys and Enter to select a target. The selected directory is
+created if necessary. For CI or another non-interactive shell, set
+`SUPERPOWERS_TARGET=trae-cn` or `SUPERPOWERS_TARGET=trae`; the script fails
+instead of guessing when no TTY and no target are available.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/install.sh \
+  | SUPERPOWERS_TARGET=trae-cn bash
+```
+
+Before copying, the script checks `~/.agents/skills`. When all four core
+Superpowers skills
+(`using-superpowers`, `brainstorming`, `test-driven-development`, and
+`systematic-debugging`) are present there, that external installation is reused
+instead. You still select the Trae variant that receives the User Rule, but no
+skills are copied there. The script does not update, add a manifest to, or
+uninstall anything from `.agents`.
+
+A partial Superpowers installation in `.agents` is left unchanged and a
+complete copy is installed into the selected Trae directory. The legacy
+`~/._agent-cn` and `~/._agent` directories are no longer detected or migrated.
+The scripts support macOS, Linux, and Windows (Git Bash / WSL).
+
+After it finishes, restart Trae and [confirm the User Rule](#configure-user-rules).
 
 ## Configure User Rules
 
-`install.sh` and `update.sh` now write this rule automatically into each Trae
-variant's `user_rules/` directory. **Restart Trae, then open Settings > Rules
+`install.sh` and `update.sh` write this rule automatically into the selected
+Trae variant's `user_rules/` directory. **Restart Trae, then open Settings > Rules
 to confirm the rule appears.** The rule file is already on disk; if Trae still
 does not show it (some versions need a manual confirm), paste it yourself using
 the text below as a fallback:
@@ -71,16 +94,14 @@ Restart Trae after saving so the rules take effect.
 ```bash
 git clone --depth 1 https://github.com/obra/superpowers.git /tmp/superpowers
 
-# Global skills dir. CN version uses ~/._agent-cn; international uses ~/._agent.
-mkdir -p ~/._agent-cn/skills
-cp -R /tmp/superpowers/skills/. ~/._agent-cn/skills/
+# Global skills dir for Trae CN.
+mkdir -p ~/.trae-cn/skills
+cp -R /tmp/superpowers/skills/. ~/.trae-cn/skills/
 
 rm -rf /tmp/superpowers
 ```
 
-For the international version, replace `._agent-cn` with `._agent`. The one-line
-installer additionally probes `.trae-cn` / `.trae` in case your setup uses
-those names, so you don't have to guess.
+For the international version, replace `.trae-cn` with `.trae`.
 
 After copying the skills, [configure User Rules](#configure-user-rules).
 
@@ -97,10 +118,13 @@ like "help me design a new feature"—the `brainstorming` skill should trigger.
 curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/update.sh | bash
 ```
 
-This re-syncs the installed skills to the latest upstream state (an exact
-mirror): it updates changed content and removes skills that upstream has
-deleted. It never touches skills you installed yourself—only skills this
-project recorded in its manifest are affected.
+This re-syncs one managed `.trae*/skills` copy to the latest upstream state (an
+exact mirror): it updates changed content and removes skills that upstream has
+deleted. A single manifest is located automatically; if both targets or neither
+target has one, the script asks you to choose. It never touches skills you
+installed yourself. When a complete Superpowers installation exists in
+`.agents/skills`, the external copy is reused and left unchanged; a single
+managed User Rule identifies the target automatically, otherwise you choose it.
 
 ## Uninstall
 
@@ -110,18 +134,26 @@ curl -fsSL https://raw.githubusercontent.com/luyangkk/trae-superpowers/main/unin
 
 This removes only the skills provided by upstream Superpowers; your own skills
 are left untouched. When a manifest is present it uninstalls precisely from that
-list (no network needed); otherwise it falls back to the upstream skill list.
-It also removes the User Rule this project wrote (matched by a hidden marker); rules you added yourself are left untouched.
+list (no network needed); a single manifest is located automatically, otherwise
+you choose a target. Without a manifest, it falls back to the upstream skill
+list in that target. It also removes the User Rule this project wrote (matched
+by a hidden marker); rules you added yourself are left untouched. A complete
+external installation in `.agents/skills` is never removed. In that reuse mode,
+uninstall needs no selection: it removes manifest-managed duplicates and
+managed User Rules from both Trae variants.
 
 ## How it works
 
-- **Skills** are copied into Trae's global skills directory so they load in
-  every project.
+- **Skills** are copied into the selected `.trae-cn/skills` or `.trae/skills`
+  directory so they load in every project. A complete `.agents/skills`
+  installation takes precedence and is only reused. A Trae skills path that
+  resolves to `.agents/skills` is never modified.
 - **User Rules** replace the upstream SessionStart hook, instructing the agent
   to check for a relevant skill before any task.
-- **Manifest**—a `.superpowers-manifest` file in each skills directory records
-  which skills this project installed, so update and uninstall can target them
-  precisely without touching your own skills. Do not edit it by hand.
+- **Manifest**—a `.superpowers-manifest` file in each managed Trae skills
+  directory records which skills this project installed, so update and
+  uninstall can target them precisely without touching your own skills.
+  `.agents/skills` never receives this manifest. Do not edit it by hand.
 
 ## License
 
