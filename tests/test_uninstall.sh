@@ -29,7 +29,7 @@ t_uninstall_fallback() {
 # t_no_manifest_without_target: 无 manifest、无 TTY 且未指定目标时必须失败。
 t_no_manifest_without_target() {
   local home; home="$(make_temp_home)"
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$home/missing" \
+  HOME="$home" SUPERPOWERS_TTY=/dev/null SUPERPOWERS_SKILLS_SRC="$home/missing" \
     bash "$UNINSTALL" </dev/null >/dev/null 2>&1
   assert_exit_code 2 "$?" "无 manifest 且无目标时退出码为 2"
   rm -rf "$home"
@@ -137,6 +137,44 @@ t_refuses_agents_alias_uninstall() {
   rm -rf "$home"
 }
 
+# t_refuses_agents_root_alias_uninstall: 普通卸载不得经 Trae 根目录别名修改 .agents。
+t_refuses_agents_root_alias_uninstall() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/.agents/user_rules"
+  printf '<!-- trae-superpowers-managed-rule -->\nbody\n' > "$home/.agents/user_rules/rule-managed.md"
+  ln -s "$home/.agents" "$home/$V_TRAE_CN"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$UNINSTALL" >/dev/null 2>&1
+  assert_exit_code 5 "$?" "普通卸载拒绝 .agents 根目录别名"
+  assert_file_exists "$home/.agents/user_rules/rule-managed.md" ".agents 托管规则保持不变"
+  rm -rf "$home"
+}
+
+# t_reuse_preserves_agents_root_rule: 复用卸载不得经 Trae 根目录别名删除 .agents 规则。
+t_reuse_preserves_agents_root_rule() {
+  local home; home="$(make_temp_home)"
+  make_fake_agents_superpowers "$home"
+  mkdir -p "$home/.agents/user_rules"
+  printf '<!-- trae-superpowers-managed-rule -->\nbody\n' > "$home/.agents/user_rules/rule-managed.md"
+  ln -s "$home/.agents" "$home/$V_TRAE_CN"
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$home/missing" bash "$UNINSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "复用卸载跳过 .agents 根目录别名"
+  assert_file_exists "$home/.agents/user_rules/rule-managed.md" "复用卸载保留 .agents 规则"
+  rm -rf "$home"
+}
+
+# t_manifest_skips_unsafe_name: manifest 卸载不会按越界名称删除 skills 外目录。
+t_manifest_skips_unsafe_name() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills" "$home/$V_TRAE_CN/victim"
+  printf 'keep\n' > "$home/$V_TRAE_CN/victim/data"
+  printf '../victim\n' > "$home/$V_TRAE_CN/skills/$MANIFEST"
+  HOME="$home" bash "$UNINSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "manifest 卸载忽略不安全名称"
+  assert_file_contains "$home/$V_TRAE_CN/victim/data" "keep" "manifest 卸载保留 skills 外目录"
+  rm -rf "$home"
+}
+
 t_uninstall_fallback
 t_no_manifest_without_target
 t_uninstall_by_manifest
@@ -145,4 +183,7 @@ t_reused_agents_uninstall
 t_reuse_preserves_agents_alias
 t_uninstall_removes_managed_rule
 t_refuses_agents_alias_uninstall
+t_refuses_agents_root_alias_uninstall
+t_reuse_preserves_agents_root_rule
+t_manifest_skips_unsafe_name
 finish_tests

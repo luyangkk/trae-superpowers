@@ -55,6 +55,17 @@ assert_dir_absent() {
   fi
 }
 
+# assert_dir_empty: 断言目录存在且不包含任何条目。参数: $1=路径 $2=用例描述
+assert_dir_empty() {
+  if [ -d "$1" ] && [ -z "$(find "$1" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)" ]; then
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+    printf 'PASS: %s\n' "$2"
+  else
+    TESTS_FAILED=$((TESTS_FAILED + 1))
+    printf 'FAIL: %s (directory missing or not empty: %s)\n' "$2" "$1"
+  fi
+}
+
 # assert_file_exists: 断言文件存在。参数: $1=路径 $2=用例描述
 assert_file_exists() {
   if [ -f "$1" ]; then

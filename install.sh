@@ -68,7 +68,8 @@ target_root() {
 # select_target: 从环境变量或 /dev/tty 选择唯一 Trae 目标,输出 trae-cn 或 trae。
 # curl|bash 会占用 stdin,因此交互始终直接读写控制终端。
 select_target() {
-  local target="${SUPERPOWERS_TARGET:-}" key rest selected=0 esc
+  local target="${SUPERPOWERS_TARGET:-}" tty="${SUPERPOWERS_TTY:-/dev/tty}"
+  local key rest selected=0 esc
   if [ -n "$target" ]; then
     if target_root "$target" >/dev/null; then
       printf '%s\n' "$target"
@@ -77,11 +78,16 @@ select_target() {
     log ERROR "invalid SUPERPOWERS_TARGET: $target (expected trae-cn or trae)"
     return 2
   fi
-  if ! ( : </dev/tty ) 2>/dev/null; then
+  if ! ( : <"$tty" ) 2>/dev/null; then
     log ERROR "no interactive terminal; set SUPERPOWERS_TARGET=trae-cn or trae."
     return 2
   fi
-  exec 3<>/dev/tty
+  exec 3<>"$tty"
+  if [ ! -t 3 ]; then
+    exec 3>&-
+    log ERROR "no interactive terminal; set SUPERPOWERS_TARGET=trae-cn or trae."
+    return 2
+  fi
   esc="$(printf '\033')"
   printf 'Select the Trae installation to manage:\n' >&3
   printf '  > Trae CN        (~/%s/skills)\n' "$(target_root trae-cn)" >&3
@@ -147,15 +153,35 @@ agents_superpowers_state() {
   return 2
 }
 
-# is_agents_skills_dir: 判断候选目录是否与外部 .agents/skills 指向同一真实路径。
-# 两个目录都存在时才比较,用于防止通过 Trae 软链接间接修改外部安装。
+# is_agents_skills_dir: 判断候选路径的最近存在父目录是否落在外部 .agents 树内。
+# 候选目录尚未创建时仍能识别 Trae 根目录软链接,防止间接修改外部安装。
 is_agents_skills_dir() {
-  local candidate="$1" agents candidate_real agents_real
-  agents="$(agents_skills_dir)"
-  [ -d "$candidate" ] && [ -d "$agents" ] || return 1
-  candidate_real="$(cd "$candidate" 2>/dev/null && pwd -P)" || return 1
-  agents_real="$(cd "$agents" 2>/dev/null && pwd -P)" || return 1
-  [ "$candidate_real" = "$agents_real" ]
+  local candidate="$1" probe agents_root candidate_real agents_real parent
+  agents_root="$HOME/$(printf '\056agents')"
+  [ -d "$agents_root" ] || return 1
+  probe="$candidate"
+  while [ ! -d "$probe" ]; do
+    parent="$(dirname "$probe")"
+    [ "$parent" != "$probe" ] || return 1
+    probe="$parent"
+  done
+  candidate_real="$(cd "$probe" 2>/dev/null && pwd -P)" || return 1
+  agents_real="$(cd "$agents_root" 2>/dev/null && pwd -P)" || return 1
+  case "$candidate_real" in
+    "$agents_real"|"$agents_real"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# is_safe_skill_name: manifest 条目必须是单个普通目录名,不得包含路径分隔符。
+# 参数: $1=skill 名。返回 0 表示可安全拼接到 skills 根目录下。
+is_safe_skill_name() {
+  local name="$1"
+  [ -n "$name" ] && [ "$name" != "." ] && [ "$name" != ".." ] || return 1
+  case "$name" in
+    */*|*\\*) return 1 ;;
+    *) return 0 ;;
+  esac
 }
 
 # resolve_src: 返回 skills 源目录(内含各 skill 子目录)。
@@ -204,15 +230,33 @@ copy_skills() {
 # 仅记录实际已落入 dst 的 skill(目录存在),避免声称复制失败的 skill(设计 §8)。
 # 参数: $1=源 skills 目录  $2=目标 skills 目录
 write_manifest() {
-  local src="$1" dst="$2" entry name
-  : > "$dst/$MANIFEST"                    # 清空/新建 manifest
+  local src="$1" dst="$2" entry name tmp target
+  target="$dst/$MANIFEST"
+  tmp="$(mktemp "$dst/$MANIFEST.tmp.XXXXXX")" || {
+    log ERROR "failed to create temporary manifest in: $dst"
+    return 1
+  }
   for entry in "$src"/*/; do
     [ -d "$entry" ] || continue
     name="$(basename "$entry")"
     [ -d "$dst/$name" ] || continue       # 未成功装入 dst 的 skill 不写入 manifest
-    printf '%s\n' "$name" >> "$dst/$MANIFEST"
+    if ! printf '%s\n' "$name" >> "$tmp"; then
+      rm -f "$tmp"
+      log ERROR "failed to write temporary manifest: $tmp"
+      return 1
+    fi
   done
-  log INFO "Wrote manifest: $dst/$MANIFEST"
+  if [ -L "$target" ] && ! rm -f "$target"; then
+    rm -f "$tmp"
+    log ERROR "failed to remove manifest symlink: $target"
+    return 1
+  fi
+  if ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    log ERROR "failed to replace manifest: $target"
+    return 1
+  fi
+  log INFO "Wrote manifest: $target"
 }
 
 # remove_managed_skills: 按 manifest 清理本项目装入的 Trae 副本,不猜测未记录目录的归属。
@@ -223,6 +267,10 @@ remove_managed_skills() {
   log INFO "Removing managed duplicate skills from: $dst"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
+    if ! is_safe_skill_name "$name"; then
+      log WARN "ignoring unsafe skill name in manifest: $name"
+      continue
+    fi
     if [ -d "$dst/$name" ]; then
       log INFO "  - $name"
       rm -rf "${dst:?}/${name:?}"
@@ -239,7 +287,7 @@ remove_managed_skills() {
 # 只碰带 MARKER 的文件,不触碰用户自有规则。
 # 参数: $1=目标 user_rules 目录
 write_rule() {
-  local dir="$1" target="" f
+  local dir="$1" target="" f tmp
   mkdir -p "$dir"
   # 收集已存在的带标记文件
   for f in "$dir"/*.md; do
@@ -256,7 +304,25 @@ write_rule() {
   if [ -z "$target" ]; then
     target="$dir/rule-$(date +%s)000.md" # 首次创建:仿原生命名
   fi
-  printf '%s\n%s\n' "$MARKER" "$RULE_BODY" > "$target"
+  tmp="$(mktemp "$dir/.trae-superpowers-rule.XXXXXX")" || {
+    log ERROR "failed to create temporary User Rule in: $dir"
+    return 1
+  }
+  if ! printf '%s\n%s\n' "$MARKER" "$RULE_BODY" > "$tmp"; then
+    rm -f "$tmp"
+    log ERROR "failed to write temporary User Rule: $tmp"
+    return 1
+  fi
+  if [ -L "$target" ] && ! rm -f "$target"; then
+    rm -f "$tmp"
+    log ERROR "failed to remove User Rule symlink: $target"
+    return 1
+  fi
+  if ! mv -f "$tmp" "$target"; then
+    rm -f "$tmp"
+    log ERROR "failed to replace User Rule: $target"
+    return 1
+  fi
   log INFO "Wrote User Rule: $target"
 }
 
@@ -266,6 +332,10 @@ main() {
   d="$(target_skills_dir "$target")"
   rdir="$(target_rules_dir "$target")"
   log INFO "Selected target: $d"
+  if is_agents_skills_dir "$rdir"; then
+    log ERROR "refusing to write User Rules through a Trae path inside external .agents: $rdir"
+    return 5
+  fi
 
   local agents_state agents_dir
   agents_dir="$(agents_skills_dir)"
@@ -279,7 +349,9 @@ main() {
     else
       remove_managed_skills "$d"
     fi
-    write_rule "$rdir"
+    if ! write_rule "$rdir"; then
+      return 4
+    fi
     log INFO "Done. Reusing external Superpowers skills; restart Trae and confirm the rule appears."
     return 0
   fi
@@ -305,10 +377,16 @@ main() {
 
   log INFO "Installing skills into: $d"
   copy_skills "$src" "$d"
-  write_manifest "$src" "$d"
+  if ! write_manifest "$src" "$d"; then
+    [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ] && rm -rf "$(dirname "$src")"
+    return 4
+  fi
 
   # 自动写入 User Rules(尽力而为:写入后需重启 Trae 验收;失败可 UI 手动回退)。
-  write_rule "$rdir"
+  if ! write_rule "$rdir"; then
+    [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ] && rm -rf "$(dirname "$src")"
+    return 4
+  fi
 
   # 若为临时 clone(非注入源),安装后清理
   if [ -z "${SUPERPOWERS_SKILLS_SRC:-}" ]; then

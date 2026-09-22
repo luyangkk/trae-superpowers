@@ -36,7 +36,8 @@ target_root() {
 # select_target: 从环境变量或 /dev/tty 选择唯一 Trae 目标,输出 trae-cn 或 trae。
 # curl|bash 会占用 stdin,因此交互始终直接读写控制终端。
 select_target() {
-  local target="${SUPERPOWERS_TARGET:-}" key rest selected=0 esc
+  local target="${SUPERPOWERS_TARGET:-}" tty="${SUPERPOWERS_TTY:-/dev/tty}"
+  local key rest selected=0 esc
   if [ -n "$target" ]; then
     if target_root "$target" >/dev/null; then
       printf '%s\n' "$target"
@@ -45,11 +46,16 @@ select_target() {
     log ERROR "invalid SUPERPOWERS_TARGET: $target (expected trae-cn or trae)"
     return 2
   fi
-  if ! ( : </dev/tty ) 2>/dev/null; then
+  if ! ( : <"$tty" ) 2>/dev/null; then
     log ERROR "no interactive terminal; set SUPERPOWERS_TARGET=trae-cn or trae."
     return 2
   fi
-  exec 3<>/dev/tty
+  exec 3<>"$tty"
+  if [ ! -t 3 ]; then
+    exec 3>&-
+    log ERROR "no interactive terminal; set SUPERPOWERS_TARGET=trae-cn or trae."
+    return 2
+  fi
   esc="$(printf '\033')"
   printf 'Select the Trae installation to manage:\n' >&3
   printf '  > Trae CN        (~/%s/skills)\n' "$(target_root trae-cn)" >&3
@@ -115,15 +121,35 @@ agents_superpowers_state() {
   return 2
 }
 
-# is_agents_skills_dir: 判断候选目录是否与外部 .agents/skills 指向同一真实路径。
-# 两个目录都存在时才比较,用于防止通过 Trae 软链接间接删除外部安装。
+# is_agents_skills_dir: 判断候选路径的最近存在父目录是否落在外部 .agents 树内。
+# 候选目录尚未创建时仍能识别 Trae 根目录软链接,防止间接删除外部安装。
 is_agents_skills_dir() {
-  local candidate="$1" agents candidate_real agents_real
-  agents="$(agents_skills_dir)"
-  [ -d "$candidate" ] && [ -d "$agents" ] || return 1
-  candidate_real="$(cd "$candidate" 2>/dev/null && pwd -P)" || return 1
-  agents_real="$(cd "$agents" 2>/dev/null && pwd -P)" || return 1
-  [ "$candidate_real" = "$agents_real" ]
+  local candidate="$1" probe agents_root candidate_real agents_real parent
+  agents_root="$HOME/$(printf '\056agents')"
+  [ -d "$agents_root" ] || return 1
+  probe="$candidate"
+  while [ ! -d "$probe" ]; do
+    parent="$(dirname "$probe")"
+    [ "$parent" != "$probe" ] || return 1
+    probe="$parent"
+  done
+  candidate_real="$(cd "$probe" 2>/dev/null && pwd -P)" || return 1
+  agents_real="$(cd "$agents_root" 2>/dev/null && pwd -P)" || return 1
+  case "$candidate_real" in
+    "$agents_real"|"$agents_real"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# is_safe_skill_name: manifest 条目必须是单个普通目录名,不得包含路径分隔符。
+# 参数: $1=skill 名。返回 0 表示可安全拼接到 skills 根目录下。
+is_safe_skill_name() {
+  local name="$1"
+  [ -n "$name" ] && [ "$name" != "." ] && [ "$name" != ".." ] || return 1
+  case "$name" in
+    */*|*\\*) return 1 ;;
+    *) return 0 ;;
+  esac
 }
 
 # unique_manifest_target: 恰有一个 Trae 目标带 manifest 时输出其目标名。
@@ -169,6 +195,10 @@ remove_by_manifest() {
   log INFO "Uninstalling by manifest: $dst/$MANIFEST"
   while IFS= read -r name; do
     [ -n "$name" ] || continue
+    if ! is_safe_skill_name "$name"; then
+      log WARN "ignoring unsafe skill name in manifest: $name"
+      continue
+    fi
     if [ -d "$dst/$name" ]; then
       log INFO "  - $name"
       rm -rf "${dst:?}/${name:?}"
@@ -202,7 +232,11 @@ remove_all_managed_rules() {
   local target rdir
   for target in trae-cn trae; do
     rdir="$(target_rules_dir "$target")"
-    remove_managed_rule "$rdir"
+    if is_agents_skills_dir "$rdir"; then
+      log INFO "Skipping managed-rule cleanup through .agents alias: $rdir"
+    else
+      remove_managed_rule "$rdir"
+    fi
   done
 }
 
@@ -238,6 +272,10 @@ main() {
   d="$(target_skills_dir "$target")"
   rdir="$(target_rules_dir "$target")"
   log INFO "Selected target: $d"
+  if is_agents_skills_dir "$rdir"; then
+    log ERROR "refusing to uninstall User Rules through a Trae path inside external .agents: $rdir"
+    return 5
+  fi
   if is_agents_skills_dir "$d"; then
     log ERROR "refusing to uninstall through Trae path that resolves to external .agents/skills: $d"
     return 5

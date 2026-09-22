@@ -30,7 +30,8 @@ t_target_case() {
 t_no_target_without_tty() {
   local home; home="$(make_temp_home)"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" </dev/null >/dev/null 2>&1
+  HOME="$home" SUPERPOWERS_TTY=/dev/null SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" </dev/null >/dev/null 2>&1
   assert_exit_code 2 "$?" "无 TTY 且无目标时退出码为 2"
   assert_dir_absent "$home/$V_TRAE_CN" "失败时不创建国内版目录"
   assert_dir_absent "$home/$V_TRAE" "失败时不创建国际版目录"
@@ -153,6 +154,137 @@ t_refuses_agents_alias_install() {
   rm -rf "$home" "$src"
 }
 
+# t_refuses_agents_root_alias_install: Trae 根目录指向 .agents 时不得创建外部 skills 或规则。
+t_refuses_agents_root_alias_install() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/.agents"
+  ln -s "$home/.agents" "$home/$V_TRAE_CN"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 5 "$?" "指向 .agents 根目录的安装目标被拒绝"
+  assert_dir_absent "$home/.agents/skills" ".agents 下未创建 skills"
+  assert_dir_absent "$home/.agents/user_rules" ".agents 下未创建 user_rules"
+  rm -rf "$home" "$src"
+}
+
+# t_reuse_rejects_agents_rule_alias: 复用模式也不得经 Trae 根目录别名写 .agents User Rule。
+t_reuse_rejects_agents_rule_alias() {
+  local home; home="$(make_temp_home)"
+  make_fake_agents_superpowers "$home"
+  ln -s "$home/.agents" "$home/$V_TRAE_CN"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 5 "$?" "复用模式拒绝 .agents 根目录别名"
+  assert_dir_absent "$home/.agents/user_rules" "复用模式未向 .agents 写规则"
+  rm -rf "$home"
+}
+
+# t_reuse_skips_unsafe_manifest_name: 复用清理不会按越界 manifest 删除 skills 外目录。
+t_reuse_skips_unsafe_manifest_name() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills" "$home/$V_TRAE_CN/victim"
+  printf 'keep\n' > "$home/$V_TRAE_CN/victim/data"
+  printf '../victim\n' > "$home/$V_TRAE_CN/skills/$MANIFEST"
+  make_fake_agents_superpowers "$home"
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "复用清理忽略不安全 manifest 名称"
+  assert_file_contains "$home/$V_TRAE_CN/victim/data" "keep" "复用清理保留 skills 外目录"
+  rm -rf "$home"
+}
+
+# t_manifest_write_replaces_symlink: 写 manifest 时替换软链接本身,不得覆盖 .agents 文件。
+t_manifest_write_replaces_symlink() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills" "$home/.agents"
+  printf 'keep\n' > "$home/.agents/external-manifest"
+  ln -s "$home/.agents/external-manifest" "$home/$V_TRAE_CN/skills/$MANIFEST"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "manifest 软链接场景安装成功"
+  assert_file_contains "$home/.agents/external-manifest" "keep" ".agents 外部文件未被覆盖"
+  assert_file_contains "$home/$V_TRAE_CN/skills/$MANIFEST" "using-superpowers" "目标 manifest 已写入"
+  rm -rf "$home" "$src"
+}
+
+# t_manifest_rm_failure_stops_replace: 删除 manifest 软链接失败时不得继续向其目标目录移动文件。
+t_manifest_rm_failure_stops_replace() {
+  local home; home="$(make_temp_home)"
+  local fakebin; fakebin="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills" "$home/.agents/external-dir"
+  ln -s "$home/.agents/external-dir" "$home/$V_TRAE_CN/skills/$MANIFEST"
+  # shellcheck disable=SC2016 # 变量由生成的假 rm 脚本在运行时展开。
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'if [ "$1" = "-f" ] && [ "$2" = "$BLOCK_RM_PATH" ]; then exit 1; fi' \
+    'exec /bin/rm "$@"' > "$fakebin/rm"
+  chmod +x "$fakebin/rm"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" PATH="$fakebin:$PATH" BLOCK_RM_PATH="$home/$V_TRAE_CN/skills/$MANIFEST" \
+    SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 4 "$?" "删除 manifest 链接失败时安装返回错误"
+  assert_dir_empty "$home/.agents/external-dir" "删除链接失败时 .agents 目标目录保持为空"
+  rm -rf "$home" "$src" "$fakebin"
+}
+
+# t_manifest_write_failure_returns_error: 临时 manifest 写入失败时不得移动半成品。
+t_manifest_write_failure_returns_error() {
+  local home; home="$(make_temp_home)"
+  local fakebin; fakebin="$(make_temp_home)"
+  mkdir -p "$home/.agents/external-dir"
+  # shellcheck disable=SC2016 # 变量由生成的假 mktemp 脚本在运行时展开。
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'rm -f "$FAKE_TMP_PATH"' \
+    'ln -s "$FAKE_TMP_TARGET" "$FAKE_TMP_PATH"' \
+    'printf "%s\n" "$FAKE_TMP_PATH"' > "$fakebin/mktemp"
+  chmod +x "$fakebin/mktemp"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" PATH="$fakebin:$PATH" FAKE_TMP_PATH="$fakebin/write-target" \
+    FAKE_TMP_TARGET="$home/.agents/external-dir" SUPERPOWERS_TARGET=trae-cn \
+    SUPERPOWERS_SKILLS_SRC="$src" bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 4 "$?" "临时 manifest 写入失败时安装返回错误"
+  assert_file_absent "$home/$V_TRAE_CN/skills/$MANIFEST" "写入失败时不发布 manifest"
+  rm -rf "$home" "$src" "$fakebin"
+}
+
+# t_rule_write_replaces_symlink: 刷新 Rule 时替换软链接本身,不得覆盖 .agents 文件。
+t_rule_write_replaces_symlink() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/user_rules" "$home/.agents"
+  printf '<!-- trae-superpowers-managed-rule -->\nkeep\n' > "$home/.agents/external-rule.md"
+  ln -s "$home/.agents/external-rule.md" "$home/$V_TRAE_CN/user_rules/rule-managed.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "Rule 软链接场景安装成功"
+  assert_file_contains "$home/.agents/external-rule.md" "keep" ".agents 外部 Rule 未被覆盖"
+  assert_file_contains "$home/$V_TRAE_CN/user_rules/rule-managed.md" "**Superpowers Skills System**" "目标 Rule 已刷新"
+  rm -rf "$home" "$src"
+}
+
+# t_rule_rm_failure_returns_error: 无法安全替换 Rule 软链接时安装必须返回错误。
+t_rule_rm_failure_returns_error() {
+  local home; home="$(make_temp_home)"
+  local fakebin; fakebin="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/user_rules" "$home/.agents"
+  printf '<!-- trae-superpowers-managed-rule -->\nkeep\n' > "$home/.agents/external-rule.md"
+  ln -s "$home/.agents/external-rule.md" "$home/$V_TRAE_CN/user_rules/rule-managed.md"
+  # shellcheck disable=SC2016 # 变量由生成的假 rm 脚本在运行时展开。
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'if [ "$1" = "-f" ] && [ "$2" = "$BLOCK_RM_PATH" ]; then exit 1; fi' \
+    'exec /bin/rm "$@"' > "$fakebin/rm"
+  chmod +x "$fakebin/rm"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" PATH="$fakebin:$PATH" BLOCK_RM_PATH="$home/$V_TRAE_CN/user_rules/rule-managed.md" \
+    SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$INSTALL" >/dev/null 2>&1
+  assert_exit_code 4 "$?" "删除 Rule 链接失败时安装返回错误"
+  assert_file_contains "$home/.agents/external-rule.md" "keep" "Rule 替换失败时 .agents 文件不变"
+  rm -rf "$home" "$src" "$fakebin"
+}
+
 # t_reinstall_no_nesting: 重复安装刷新顶层内容且不产生嵌套目录。
 t_reinstall_no_nesting() {
   local home; home="$(make_temp_home)"
@@ -238,6 +370,14 @@ t_reuse_cleans_managed_duplicate
 t_reuse_preserves_agents_alias
 t_partial_agents_installs_trae
 t_refuses_agents_alias_install
+t_refuses_agents_root_alias_install
+t_reuse_rejects_agents_rule_alias
+t_reuse_skips_unsafe_manifest_name
+t_manifest_write_replaces_symlink
+t_manifest_rm_failure_stops_replace
+t_manifest_write_failure_returns_error
+t_rule_write_replaces_symlink
+t_rule_rm_failure_returns_error
 t_reinstall_no_nesting
 t_copy_failure_skips_manifest
 t_writes_user_rule

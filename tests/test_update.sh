@@ -15,7 +15,8 @@ MANIFEST=".superpowers-manifest"
 t_no_manifest_without_target() {
   local home; home="$(make_temp_home)"
   local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
-  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" </dev/null >/dev/null 2>&1
+  HOME="$home" SUPERPOWERS_TTY=/dev/null SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$UPDATE" </dev/null >/dev/null 2>&1
   assert_exit_code 2 "$?" "无 manifest 且无目标时退出码为 2"
   rm -rf "$home" "$src"
 }
@@ -201,6 +202,113 @@ t_refuses_agents_alias_update() {
   rm -rf "$home" "$src"
 }
 
+# t_refuses_agents_root_alias_update: Trae 根目录指向 .agents 时不得创建外部 skills 或规则。
+t_refuses_agents_root_alias_update() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/.agents"
+  ln -s "$home/.agents" "$home/$V_TRAE_CN"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" using-superpowers
+  HOME="$home" SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 5 "$?" "指向 .agents 根目录的更新目标被拒绝"
+  assert_dir_absent "$home/.agents/skills" ".agents 下未创建 skills"
+  assert_dir_absent "$home/.agents/user_rules" ".agents 下未创建 user_rules"
+  rm -rf "$home" "$src"
+}
+
+# t_remove_orphans_skips_unsafe_manifest_name: 孤儿清理不会按越界名称删除 skills 外目录。
+t_remove_orphans_skips_unsafe_manifest_name() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills" "$home/$V_TRAE_CN/victim"
+  printf 'keep\n' > "$home/$V_TRAE_CN/victim/data"
+  printf '../victim\n' > "$home/$V_TRAE_CN/skills/$MANIFEST"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "孤儿清理忽略不安全 manifest 名称"
+  assert_file_contains "$home/$V_TRAE_CN/victim/data" "keep" "孤儿清理保留 skills 外目录"
+  rm -rf "$home" "$src"
+}
+
+# t_update_replaces_leaf_symlinks: 更新写 manifest 和 Rule 时不得跟随指向 .agents 的软链接。
+t_update_replaces_leaf_symlinks() {
+  local home; home="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills/skill-a" "$home/$V_TRAE_CN/user_rules" "$home/.agents"
+  printf 'skill-a\nkeep\n' > "$home/.agents/external-manifest"
+  printf '<!-- trae-superpowers-managed-rule -->\nkeep\n' > "$home/.agents/external-rule.md"
+  ln -s "$home/.agents/external-manifest" "$home/$V_TRAE_CN/skills/$MANIFEST"
+  ln -s "$home/.agents/external-rule.md" "$home/$V_TRAE_CN/user_rules/rule-managed.md"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  HOME="$home" SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 0 "$?" "叶子软链接场景更新成功"
+  assert_file_contains "$home/.agents/external-manifest" "keep" ".agents 外部 manifest 未被覆盖"
+  assert_file_contains "$home/.agents/external-rule.md" "keep" ".agents 外部 Rule 未被覆盖"
+  assert_file_contains "$home/$V_TRAE_CN/skills/$MANIFEST" "skill-a" "目标 manifest 已刷新"
+  assert_file_contains "$home/$V_TRAE_CN/user_rules/rule-managed.md" "**Superpowers Skills System**" "目标 Rule 已刷新"
+  rm -rf "$home" "$src"
+}
+
+# t_update_manifest_rm_failure_stops_replace: 删除 manifest 链接失败时不得向其目标目录移动文件。
+t_update_manifest_rm_failure_stops_replace() {
+  local home; home="$(make_temp_home)"
+  local fakebin; fakebin="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills/skill-a" "$home/.agents/external-dir"
+  ln -s "$home/.agents/external-dir" "$home/$V_TRAE_CN/skills/$MANIFEST"
+  # shellcheck disable=SC2016 # 变量由生成的假 rm 脚本在运行时展开。
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'if [ "$1" = "-f" ] && [ "$2" = "$BLOCK_RM_PATH" ]; then exit 1; fi' \
+    'exec /bin/rm "$@"' > "$fakebin/rm"
+  chmod +x "$fakebin/rm"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  HOME="$home" PATH="$fakebin:$PATH" BLOCK_RM_PATH="$home/$V_TRAE_CN/skills/$MANIFEST" \
+    SUPERPOWERS_TARGET=trae-cn SUPERPOWERS_SKILLS_SRC="$src" \
+    bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 4 "$?" "删除 manifest 链接失败时更新返回错误"
+  assert_dir_empty "$home/.agents/external-dir" "更新删除链接失败时 .agents 目标目录保持为空"
+  rm -rf "$home" "$src" "$fakebin"
+}
+
+# t_update_rule_rm_failure_returns_error: 无法安全替换 Rule 软链接时更新必须返回错误。
+t_update_rule_rm_failure_returns_error() {
+  local home; home="$(make_temp_home)"
+  local fakebin; fakebin="$(make_temp_home)"
+  mkdir -p "$home/$V_TRAE_CN/skills/skill-a" "$home/$V_TRAE_CN/user_rules" "$home/.agents"
+  printf 'skill-a\n' > "$home/$V_TRAE_CN/skills/$MANIFEST"
+  printf '<!-- trae-superpowers-managed-rule -->\nkeep\n' > "$home/.agents/external-rule.md"
+  ln -s "$home/.agents/external-rule.md" "$home/$V_TRAE_CN/user_rules/rule-managed.md"
+  # shellcheck disable=SC2016 # 变量由生成的假 rm 脚本在运行时展开。
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'if [ "$1" = "-f" ] && [ "$2" = "$BLOCK_RM_PATH" ]; then exit 1; fi' \
+    'exec /bin/rm "$@"' > "$fakebin/rm"
+  chmod +x "$fakebin/rm"
+  local src; src="$(make_temp_home)"; make_fake_src "$src" skill-a
+  HOME="$home" PATH="$fakebin:$PATH" BLOCK_RM_PATH="$home/$V_TRAE_CN/user_rules/rule-managed.md" \
+    SUPERPOWERS_SKILLS_SRC="$src" bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 4 "$?" "删除 Rule 链接失败时更新返回错误"
+  assert_file_contains "$home/.agents/external-rule.md" "keep" "Rule 替换失败时 .agents 文件不变"
+  rm -rf "$home" "$src" "$fakebin"
+}
+
+# t_update_rule_write_failure_returns_error: 临时 Rule 写入失败时不得发布半成品。
+t_update_rule_write_failure_returns_error() {
+  local home; home="$(make_temp_home)"
+  local fakebin; fakebin="$(make_temp_home)"
+  make_fake_agents_superpowers "$home"
+  mkdir -p "$home/$V_TRAE_CN/user_rules" "$home/.agents/external-dir"
+  printf '<!-- trae-superpowers-managed-rule -->\nold\n' > "$home/$V_TRAE_CN/user_rules/rule-managed.md"
+  # shellcheck disable=SC2016 # 变量由生成的假 mktemp 脚本在运行时展开。
+  printf '%s\n' '#!/usr/bin/env bash' \
+    'rm -f "$FAKE_TMP_PATH"' \
+    'ln -s "$FAKE_TMP_TARGET" "$FAKE_TMP_PATH"' \
+    'printf "%s\n" "$FAKE_TMP_PATH"' > "$fakebin/mktemp"
+  chmod +x "$fakebin/mktemp"
+  HOME="$home" PATH="$fakebin:$PATH" FAKE_TMP_PATH="$fakebin/write-target" \
+    FAKE_TMP_TARGET="$home/.agents/external-dir" SUPERPOWERS_SKILLS_SRC="$home/missing" \
+    bash "$UPDATE" >/dev/null 2>&1
+  assert_exit_code 4 "$?" "临时 Rule 写入失败时更新返回错误"
+  assert_file_contains "$home/$V_TRAE_CN/user_rules/rule-managed.md" "old" "写入失败时保留原 Rule"
+  rm -rf "$home" "$fakebin"
+}
+
 # t_update_writes_user_rule: 普通更新会刷新托管 User Rule。
 t_update_writes_user_rule() {
   local home; home="$(make_temp_home)"
@@ -228,5 +336,11 @@ t_agents_ambiguous_rules_uses_target
 t_reuse_preserves_agents_alias
 t_partial_agents_updates_trae
 t_refuses_agents_alias_update
+t_refuses_agents_root_alias_update
+t_remove_orphans_skips_unsafe_manifest_name
+t_update_replaces_leaf_symlinks
+t_update_manifest_rm_failure_stops_replace
+t_update_rule_rm_failure_returns_error
+t_update_rule_write_failure_returns_error
 t_update_writes_user_rule
 finish_tests
